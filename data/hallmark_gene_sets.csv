@@ -1,0 +1,21 @@
+hallmark,assigned_to,gene
+Sustained proliferative signaling,Will,EGFR
+Sustained proliferative signaling,Will,ERBB2
+Sustained proliferative signaling,Will,KRAS
+Sustained proliferative signaling,Will,NRAS
+Sustained proliferative signaling,Will,BRAF
+Sustained proliferative signaling,Will,PIK3CA
+Sustained proliferative signaling,Will,AKT1
+Sustained proliferative signaling,Will,MYC
+Sustained proliferative signaling,Will,FOS
+Sustained proliferative signaling,Will,JUN
+Resist apoptosis,Dani,TP53
+Resist apoptosis,Dani,BCL2
+Resist apoptosis,Dani,BCL2L1
+Resist apoptosis,Dani,MCL1
+Resist apoptosis,Dani,CASP8
+Resist apoptosis,Dani,CASP3
+Resist apoptosis,Dani,BAX
+Resist apoptosis,Dani,BAK1
+Resist apoptosis,Dani,APAF1
+Resist apoptosis,Dani,BID
