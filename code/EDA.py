@@ -4,7 +4,7 @@
 
 
 # We are loading the files and exploring the data with pandas / scikit-learn
-# %%
+# %%p
 from __future__ import annotations
 
 from pathlib import Path
