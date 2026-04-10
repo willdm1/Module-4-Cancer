@@ -1,6 +1,6 @@
 # Exploratory data analysis (EDA) on the Module 4 cancer dataset
 # Updated: 4/9/2026
-# Written by Will an Dani
+# Written by Will and Dani
 
 
 # We are loading the files and exploring the data with pandas / scikit-learn
