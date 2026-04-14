@@ -1,9 +1,9 @@
 # Exploratory data analysis (EDA) on the Module 4 cancer dataset
 # Updated: 4/9/2026
 # Written by Will and Dani
+# Follows the 'example_EDA.py' format from class
 
-
-# We are loading the files and exploring the data with pandas / scikit-learn
+# We are loading the fils and exploring the data with pandas / scikit-learn
 # %%p
 from __future__ import annotations
 
