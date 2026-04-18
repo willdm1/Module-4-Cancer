@@ -13,8 +13,17 @@ from typing import Dict, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
+
+try:
+    import umap.umap_ as umap
+    HAS_UMAP = True
+except ImportError:
+    HAS_UMAP = False
+
 
 # %%
 # Project paths and analysis settings
@@ -36,20 +45,24 @@ TRAINING_DATA_PATH = DATA_DIR / "TRAINING_SET_GSE62944_subsample_log2TPM.csv"
 TRAINING_METADATA_PATH = DATA_DIR / "TRAINING_SET_GSE62944_metadata.csv"
 NONNA_PATH = DATA_DIR / "GSE62944_metadata_percent_nonNA_by_cancer_type.csv"
 
-# We are focusing this first check-in on one cancer type to reduce biological heterogeneity.
+# We are focusin this first check-in on one cancer type to reduce biological heterogeneity.
 CANCER_TYPE = "COAD"  # Colon adenocarcinoma
 
-# Hallmrk split for our team:
-# - Will: Sustained proliferative signaling
+# Hallmrk split for our team (20 genes per hallmark, 40 total):
+# - Will: Susained proliferative signaling
 # - Dani: Resisting apoptosis
 PROLIFERATIVE_SIGNALING_GENES = [
     "EGFR", "ERBB2", "KRAS", "NRAS", "BRAF",
     "PIK3CA", "AKT1", "MYC", "FOS", "JUN",
+    "MET", "IGF1R", "FGFR1", "FGFR2", "EGF",
+    "HGF", "SOS1", "GRB2", "MAPK1", "MAPK3",
 ]
 
 RESIST_APOPTOSIS_GENES = [
     "TP53", "BCL2", "BCL2L1", "MCL1", "CASP8",
     "CASP3", "BAX", "BAK1", "APAF1", "BID",
+    "CASP9", "FAS", "FASLG", "BAD", "BBC3",
+    "BCL2L11", "CFLAR", "DIABLO", "TNF", "TNFRSF10B",
 ]
 
 # %%
@@ -72,6 +85,62 @@ def find_existing_stage_column(df: pd.DataFrame) -> Optional[str]:
             return col
     return None
 
+def simplify_stage(stage_value: object) -> object:
+
+    # Collapse detailed AJCC stae labels into broader Stage I / II / III / IV bins.
+    # This makes the metadata easier to visualize and creates a cleaner future target for supervised learning.
+
+    if pd.isna(stage_value):
+        return pd.NA
+
+    stage_string = str(stage_value).strip().upper()
+
+    if stage_string in {"", "[NOT AVAILABLE]", "NAN"}:
+        return pd.NA
+    if "STAGE IV" in stage_string:
+        return "Stage IV"
+    if "STAGE III" in stage_string:
+        return "Stage III"
+    if "STAGE II" in stage_string:
+        return "Stage II"
+    if "STAGE I" in stage_string:
+        return "Stage I"
+
+    return pd.NA
+
+
+def clean_cancer_metadata(cancer_metadata: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[str]]:
+    # Clean metadata for downstream plotting and modeling.
+    # Convert age to numeric if present
+    # Fnd the stage column
+    # Create simplified stage labels
+    # Create a binary stage label for a future supervised classification model
+    # (Early = Stage I/II, Late = Stage III/IV)
+    cancer_metadata = cancer_metadata.copy()
+
+    if "age_at_diagnosis" in cancer_metadata.columns:
+        cancer_metadata["age_at_diagnosis"] = pd.to_numeric(
+            cancer_metadata["age_at_diagnosis"],
+            errors="coerce",
+        )
+
+    stage_col = find_existing_stage_column(cancer_metadata)
+
+    if stage_col is not None:
+        cancer_metadata["stage_clean"] = cancer_metadata[stage_col].replace(
+            "[Not Available]", pd.NA
+        )
+        cancer_metadata["stage_simple"] = cancer_metadata["stage_clean"].apply(simplify_stage)
+        cancer_metadata["stage_binary"] = cancer_metadata["stage_simple"].map(
+            {
+                "Stage I": "Early",
+                "Stage II": "Early",
+                "Stage III": "Late",
+                "Stage IV": "Late",
+            }
+        )
+
+    return cancer_metadata, stage_col
 
 def load_data() -> Tuple[pd.DataFrame, pd.DataFrame]:
 
@@ -96,7 +165,7 @@ def load_data() -> Tuple[pd.DataFrame, pd.DataFrame]:
 
 def summarize_expression_matrix(data: pd.DataFrame) -> pd.DataFrame:
 
-    # Compute a concise summary of the full training expression matrix.
+    # Compue a concise summary of the full training expression matrix.
     # This helps answer the min/max/mean expression and the genes with the highest average expression.
 
     flattened = data.to_numpy().ravel()
@@ -203,27 +272,132 @@ def compute_hallmark_scores(
     merged = score_df.merge(cancer_metadata, left_index=True, right_index=True, how="left")
     return merged
 
+def run_unsupervised_models(
+    hallmark_gene_data: pd.DataFrame,
+    merged_scores: pd.DataFrame,
+) -> Dict[str, object]:
+
+    # We build the sample-by-gene matrix used for PCA, UMAP, and KMeans clustering.
+
+    # We follows the same sklearn workflow emphasized in lecture:
+    # 1) build X = samples x features
+    # 2) standardize the data
+    # 3) fit PCA / UMAP / clustering models
+    # 4) save coordinates and cluster assignments for plotting
+
+    # sklearn expects samples x features, so transpose the gene matrix
+    X = hallmark_gene_data.T.apply(pd.to_numeric, errors="coerce")
+    X = X.dropna(axis=0, how="any")
+
+    # Keep metadata aligned to the exact samples used in the model matrix
+    model_metadata = merged_scores.loc[X.index].copy()
+
+    # Standardize the gene-expression features before PCA / UMAP / KMeans
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # PCA
+    pca = PCA(n_components=2)
+    X_pca = pca.fit_transform(X_scaled)
+
+    pca_df = pd.DataFrame(
+        X_pca,
+        index=X.index,
+        columns=["PC1", "PC2"],
+    )
+    pca_df = pca_df.merge(model_metadata, left_index=True, right_index=True, how="left")
+
+    # KMeans clustering
+    clustering_rows = []
+    best_k = None
+    best_score = -1
+    best_labels = None
+
+    for k in range(2, 7):
+        kmeans_model = KMeans(n_clusters=k, random_state=0, n_init=20)
+        cluster_labels = kmeans_model.fit_predict(X_scaled)
+        sil = silhouette_score(X_scaled, cluster_labels)
+
+        clustering_rows.append(
+            {
+                "k": k,
+                "inertia": float(kmeans_model.inertia_),
+                "silhouette_score": float(sil),
+            }
+        )
+
+        if sil > best_score:
+            best_score = sil
+            best_k = k
+            best_labels = cluster_labels
+
+    cluster_eval_df = pd.DataFrame(clustering_rows)
+
+    cluster_series = pd.Series(
+        best_labels,
+        index=X.index,
+        name="kmeans_cluster",
+    ).astype(str)
+
+    pca_df["kmeans_cluster"] = cluster_series
+    model_metadata["kmeans_cluster"] = cluster_series
+
+    # UMAP
+    umap_df = None
+    if HAS_UMAP:
+        umap_model = umap.UMAP(
+            n_neighbors=15,
+            min_dist=0.1,
+            metric="euclidean",
+            random_state=42,
+        )
+        X_umap = umap_model.fit_transform(X_scaled)
+
+        umap_df = pd.DataFrame(
+            X_umap,
+            index=X.index,
+            columns=["UMAP1", "UMAP2"],
+        )
+        umap_df = umap_df.merge(model_metadata, left_index=True, right_index=True, how="left")
+
+    return {
+        "X": X,
+        "pca_df": pca_df,
+        "cluster_eval_df": cluster_eval_df,
+        "best_k": best_k,
+        "best_silhouette": best_score,
+        "umap_df": umap_df,
+    }
 
 def make_summary_plots(
     hallmark_gene_data: pd.DataFrame,
     merged_scores: pd.DataFrame,
     stage_col: Optional[str],
+    unsupervised_results: Dict[str, object],
 ) -> None:
-    
-    # Generate a small set of EDA figures for the notebook:
-    # 1) scatterplot comparing hallmark scores
-    # 2) boxplot by stage (if a stage column exists)
-    # 3) PCA plot across the hallmark gene expression matrix
-
+    """
+    Generate the main Check-In 2 figures:
+    1) hallmark-score scatterplot
+    2) hallmark-score boxplot by simplified stage
+    3) PCA colored by stage
+    4) PCA colored by KMeans cluster
+    5) silhouette score vs. k for KMeans
+    6) optional UMAP colored by stage
+    7) optional UMAP colored by cluster
+    """
     sns.set_theme(style="whitegrid")
 
-    # 1) Scatterplot of hallmark scores
+    stage_plot_col = "stage_simple" if "stage_simple" in merged_scores.columns else stage_col
+
+    # --------------------------------------------------
+    # 1) Scatterplot of the two hallmark scores
+    # --------------------------------------------------
     plt.figure(figsize=(7, 5))
     sns.scatterplot(
         data=merged_scores,
         x="proliferative_score",
         y="apoptosis_resistance_score",
-        hue=stage_col if stage_col is not None else None,
+        hue=stage_plot_col if stage_plot_col in merged_scores.columns else None,
         alpha=0.8,
     )
     plt.title(f"{CANCER_TYPE}: Hallmark score comparison")
@@ -234,72 +408,149 @@ def make_summary_plots(
     plt.show()
     plt.close()
 
-    # 2) Boxplot of hallmark score by stage (only if a stage column exists)
-    if stage_col is not None:
-        stage_plot_df = merged_scores[[stage_col, "proliferative_score", "apoptosis_resistance_score"]].copy()
-        stage_plot_df = stage_plot_df.dropna(subset=[stage_col])
+    # --------------------------------------------------
+    # 2) Boxplot of hallmark scores by simplified stage
+    # --------------------------------------------------
+    if stage_plot_col in merged_scores.columns:
+        stage_plot_df = merged_scores[
+            [stage_plot_col, "proliferative_score", "apoptosis_resistance_score"]
+        ].copy()
+        stage_plot_df = stage_plot_df.dropna(subset=[stage_plot_col])
 
         if not stage_plot_df.empty:
             melted = stage_plot_df.melt(
-                id_vars=stage_col,
+                id_vars=stage_plot_col,
                 value_vars=["proliferative_score", "apoptosis_resistance_score"],
                 var_name="hallmark_score_type",
                 value_name="score",
             )
 
-            plt.figure(figsize=(10, 5))
-            sns.boxplot(data=melted, x=stage_col, y="score", hue="hallmark_score_type")
-            plt.title(f"{CANCER_TYPE}: Hallmark scores by tumor stage")
-            plt.xlabel(stage_col)
+            plt.figure(figsize=(9, 5))
+            sns.boxplot(
+                data=melted,
+                x=stage_plot_col,
+                y="score",
+                hue="hallmark_score_type",
+            )
+            plt.title(f"{CANCER_TYPE}: Hallmark scores by simplified tumor stage")
+            plt.xlabel("Simplified tumor stage")
             plt.ylabel("Mean hallmark expression score")
-            plt.xticks(rotation=45, ha="right")
             plt.tight_layout()
             plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_hallmark_scores_by_stage.png", dpi=300)
             plt.show()
             plt.close()
 
-    # 3) PCA on hallmark genes using scikit-learn
-    if hallmark_gene_data.shape[0] >= 2 and hallmark_gene_data.shape[1] >= 3:
-        # PCA expects samples x features, so we transpose first
-        X = hallmark_gene_data.T
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
+    # --------------------------------------------------
+    # 3) PCA colored by stage
+    # --------------------------------------------------
+    pca_df = unsupervised_results["pca_df"]
 
-        pca = PCA(n_components=2, random_state=0)
-        pcs = pca.fit_transform(X_scaled)
+    plt.figure(figsize=(7, 5))
+    sns.scatterplot(
+        data=pca_df,
+        x="PC1",
+        y="PC2",
+        hue=stage_plot_col if stage_plot_col in pca_df.columns else None,
+        alpha=0.85,
+    )
+    plt.title(
+        f"{CANCER_TYPE}: PCA of 40 hallmark genes"
+    )
+    plt.tight_layout()
+    plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_PCA_by_stage.png", dpi=300)
+    plt.show()
+    plt.close()
 
-        pca_df = pd.DataFrame(
-            pcs,
-            index=X.index,
-            columns=["PC1", "PC2"],
-        )
-        pca_df = pca_df.merge(merged_scores, left_index=True, right_index=True, how="left")
+    # --------------------------------------------------
+    # 4) PCA colored by KMeans cluster
+    # --------------------------------------------------
+    plt.figure(figsize=(7, 5))
+    sns.scatterplot(
+        data=pca_df,
+        x="PC1",
+        y="PC2",
+        hue="kmeans_cluster",
+        palette="tab10",
+        alpha=0.85,
+    )
+    plt.title(
+        f"{CANCER_TYPE}: PCA colored by KMeans clusters "
+        f"(best k = {unsupervised_results['best_k']})"
+    )
+    plt.tight_layout()
+    plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_PCA_by_cluster.png", dpi=300)
+    plt.show()
+    plt.close()
 
+    # --------------------------------------------------
+    # 5) KMeans model-selection plot
+    # --------------------------------------------------
+    cluster_eval_df = unsupervised_results["cluster_eval_df"]
+
+    plt.figure(figsize=(6, 4))
+    sns.lineplot(
+        data=cluster_eval_df,
+        x="k",
+        y="silhouette_score",
+        marker="o",
+    )
+    plt.axvline(
+        x=unsupervised_results["best_k"],
+        linestyle="--",
+        color="black",
+        label=f"best k = {unsupervised_results['best_k']}",
+    )
+    plt.title(f"{CANCER_TYPE}: KMeans silhouette score by k")
+    plt.xlabel("Number of clusters (k)")
+    plt.ylabel("Silhouette score")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_kmeans_silhouette.png", dpi=300)
+    plt.show()
+    plt.close()
+
+    # --------------------------------------------------
+    # 6/7) Optional UMAP plots
+    # --------------------------------------------------
+    umap_df = unsupervised_results["umap_df"]
+
+    if umap_df is not None:
         plt.figure(figsize=(7, 5))
         sns.scatterplot(
-            data=pca_df,
-            x="PC1",
-            y="PC2",
-            hue=stage_col if stage_col is not None else None,
+            data=umap_df,
+            x="UMAP1",
+            y="UMAP2",
+            hue=stage_plot_col if stage_plot_col in umap_df.columns else None,
             alpha=0.85,
         )
-        plt.title(
-            f"{CANCER_TYPE}: PCA of hallmark genes\n"
-            f"PC1={pca.explained_variance_ratio_[0]:.2%}, "
-            f"PC2={pca.explained_variance_ratio_[1]:.2%}"
-        )
+        plt.title(f"{CANCER_TYPE}: UMAP of 40 hallmark genes")
         plt.tight_layout()
-        plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_hallmark_gene_PCA.png", dpi=300)
+        plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_UMAP_by_stage.png", dpi=300)
         plt.show()
         plt.close()
 
-        pca_df.to_csv(RESULTS_DIR / f"{CANCER_TYPE}_hallmark_gene_PCA_coordinates.csv")
-
+        plt.figure(figsize=(7, 5))
+        sns.scatterplot(
+            data=umap_df,
+            x="UMAP1",
+            y="UMAP2",
+            hue="kmeans_cluster",
+            palette="tab10",
+            alpha=0.85,
+        )
+        plt.title(
+            f"{CANCER_TYPE}: UMAP colored by KMeans clusters "
+            f"(best k = {unsupervised_results['best_k']})"
+        )
+        plt.tight_layout()
+        plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_UMAP_by_cluster.png", dpi=300)
+        plt.show()
+        plt.close()
 
 # %%
 # Main analysis workflow
 ####################################################
-def run_eda() -> Dict[str, pd.DataFrame]:
+def run_eda() -> Dict[str, object]:
 
     # We run the complete EDA workflow for the Module 4 check-in.
     # Returns all major tables so the notebook can reuse them directly.
@@ -340,6 +591,16 @@ def run_eda() -> Dict[str, pd.DataFrame]:
     print("Expression shape (genes x selected samples):", cancer_data.shape)
     print("Metadata shape (selected samples x features):", cancer_metadata.shape)
 
+    cancer_metadata, stage_col = clean_cancer_metadata(cancer_metadata)
+
+    if "stage_simple" in cancer_metadata.columns:
+        print("\nSimplified stage counts:")
+        print(cancer_metadata["stage_simple"].value_counts(dropna=False))
+
+    if "stage_binary" in cancer_metadata.columns:
+        print("\nBinary stage counts (planned future supervised target):")
+        print(cancer_metadata["stage_binary"].value_counts(dropna=False))
+
     hallmark_gene_data, hallmark_gene_presence = subset_hallmark_genes(cancer_data)
     print("\nRequested hallmark genes and whether they were found:")
     print(hallmark_gene_presence)
@@ -362,7 +623,6 @@ def run_eda() -> Dict[str, pd.DataFrame]:
     print("\nHallmark gene statistics within the selected cancer type:")
     print(hallmark_gene_stats)
 
-    stage_col = find_existing_stage_column(cancer_metadata)
     if stage_col is not None:
         print(f"\nUsing metadata stage column: {stage_col}")
         print(cancer_metadata[stage_col].value_counts(dropna=False))
@@ -373,6 +633,17 @@ def run_eda() -> Dict[str, pd.DataFrame]:
     print("\nSample-level hallmark score table:")
     print(merged_scores.head())
 
+    unsupervised_results = run_unsupervised_models(hallmark_gene_data, merged_scores)
+
+    print("\nKMeans model selection summary:")
+    print(unsupervised_results["cluster_eval_df"])
+
+    print(
+        f"\nBest KMeans k based on silhouette score: "
+        f"{unsupervised_results['best_k']} "
+        f"(silhouette = {unsupervised_results['best_silhouette']:.3f})"
+    )
+
     # Save the most important outputs for the notebook/report
     full_summary_df.to_csv(RESULTS_DIR / "training_expression_summary.csv", index=False)
     top_mean_expression.to_csv(RESULTS_DIR / "top20_mean_expression_genes.csv")
@@ -381,13 +652,26 @@ def run_eda() -> Dict[str, pd.DataFrame]:
     hallmark_gene_stats.to_csv(RESULTS_DIR / f"{CANCER_TYPE}_hallmark_gene_stats.csv")
     merged_scores.to_csv(RESULTS_DIR / f"{CANCER_TYPE}_sample_level_hallmark_scores.csv")
 
+    unsupervised_results["cluster_eval_df"].to_csv(
+        RESULTS_DIR / f"{CANCER_TYPE}_kmeans_cluster_evaluation.csv",
+        index=False,
+    )
+    unsupervised_results["pca_df"].to_csv(
+        RESULTS_DIR / f"{CANCER_TYPE}_PCA_coordinates_with_clusters.csv"
+    )
+
+    if unsupervised_results["umap_df"] is not None:
+        unsupervised_results["umap_df"].to_csv(
+            RESULTS_DIR / f"{CANCER_TYPE}_UMAP_coordinates_with_clusters.csv"
+        )
+
     # Save metadata completeness file 
     if NONNA_PATH.exists():
         nonna_df = pd.read_csv(NONNA_PATH)
         nonna_df.to_csv(RESULTS_DIR / "metadata_percent_nonNA_by_cancer_type_copy.csv", index=False)
         print("\nCopied metadata completeness table to results folder.")
 
-    make_summary_plots(hallmark_gene_data, merged_scores, stage_col)
+    make_summary_plots(hallmark_gene_data, merged_scores, stage_col, unsupervised_results,)
 
     print("\nEDA complete. Results were saved to:")
     print(RESULTS_DIR)
@@ -404,6 +688,9 @@ def run_eda() -> Dict[str, pd.DataFrame]:
         "hallmark_gene_presence": hallmark_gene_presence,
         "hallmark_gene_stats": hallmark_gene_stats,
         "merged_scores": merged_scores,
+        "cluster_eval": unsupervised_results["cluster_eval_df"],
+        "pca_df": unsupervised_results["pca_df"],
+        "umap_df": unsupervised_results["umap_df"],      
     }
 
 # %%
