@@ -1,7 +1,14 @@
 # Exploratory data analysis (EDA) on the Module 4 cancer dataset
-# Updated: 4/9/2026
+# Updated: 4/18/2026
 # Written by Will and Dani
-# Follows the 'example_EDA.py' format from class
+
+# Github sources we used: 
+# Dr. Groves repository: https://github.com/smgroves/Module-4-Cancer
+# scikit-learn repository: https://github.com/scikit-learn/scikit-learn
+# UMAP repository: https://github.com/lmcinnes/umap
+# pandas repository: https://github.com/pandas-dev/pandas
+
+# Follows the 'example_EDA.py' format from our class
 
 # We are loading the fils and exploring the data with pandas / scikit-learn
 # %%p
@@ -36,11 +43,14 @@ DATA_DIR_CANDIDATES = [
     PROJECT_ROOT / "data",
     PROJECT_ROOT / "Data",
 ]
+
+# Here we look for the data folder in a couple of common capitalizations and take the first one that exists.
 DATA_DIR = next((p for p in DATA_DIR_CANDIDATES if p.exists()), DATA_DIR_CANDIDATES[0])
 
 RESULTS_DIR = PROJECT_ROOT / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
+# We hardcode the paths to the training data and metadata CSVs, which are expected to be in the data folder.
 TRAINING_DATA_PATH = DATA_DIR / "TRAINING_SET_GSE62944_subsample_log2TPM.csv"
 TRAINING_METADATA_PATH = DATA_DIR / "TRAINING_SET_GSE62944_metadata.csv"
 NONNA_PATH = DATA_DIR / "GSE62944_metadata_percent_nonNA_by_cancer_type.csv"
@@ -58,6 +68,7 @@ PROLIFERATIVE_SIGNALING_GENES = [
     "HGF", "SOS1", "GRB2", "MAPK1", "MAPK3",
 ]
 
+# We are using a mix of well-known oncogenes / tumor suppressors and some more general pathway members.
 RESIST_APOPTOSIS_GENES = [
     "TP53", "BCL2", "BCL2L1", "MCL1", "CASP8",
     "CASP3", "BAX", "BAK1", "APAF1", "BID",
@@ -90,7 +101,7 @@ def simplify_stage(stage_value: object) -> object:
     # Collapse detailed AJCC stae labels into broader Stage I / II / III / IV bins.
     # This makes the metadata easier to visualize and creates a cleaner future target for supervised learning.
 
-    if pd.isna(stage_value):
+    if pd.isna(stage_value): # type: ignore
         return pd.NA
 
     stage_string = str(stage_value).strip().upper()
@@ -110,7 +121,7 @@ def simplify_stage(stage_value: object) -> object:
 
 
 def clean_cancer_metadata(cancer_metadata: pd.DataFrame) -> Tuple[pd.DataFrame, Optional[str]]:
-    # Clean metadata for downstream plotting and modeling.
+    # We clen metadata for downstream plotting and modeling.
     # Convert age to numeric if present
     # Fnd the stage column
     # Create simplified stage labels
@@ -126,11 +137,12 @@ def clean_cancer_metadata(cancer_metadata: pd.DataFrame) -> Tuple[pd.DataFrame, 
 
     stage_col = find_existing_stage_column(cancer_metadata)
 
+    # If we found a stage column, we create cleaned and simplified stage labels
     if stage_col is not None:
         cancer_metadata["stage_clean"] = cancer_metadata[stage_col].replace(
             "[Not Available]", pd.NA
         )
-        cancer_metadata["stage_simple"] = cancer_metadata["stage_clean"].apply(simplify_stage)
+        cancer_metadata["stage_simple"] = cancer_metadata["stage_clean"].apply(simplify_stage) # type: ignore
         cancer_metadata["stage_binary"] = cancer_metadata["stage_simple"].map(
             {
                 "Stage I": "Early",
@@ -205,6 +217,8 @@ def subset_cancer_type(data: pd.DataFrame, metadata_df: pd.DataFrame, cancer_typ
             "so the dataset cannot be subset by cancer type."
         )
 
+    # We find the samples with the specified cancer type in the metadata,
+    # then subset both the metadata and expression matrix to those samples.
     cancer_samples = metadata_df.loc[metadata_df["cancer_type"] == cancer_type].index.tolist()
     cancer_samples = [sample for sample in cancer_samples if sample in data.columns]
 
@@ -213,6 +227,7 @@ def subset_cancer_type(data: pd.DataFrame, metadata_df: pd.DataFrame, cancer_typ
             f"No overlapping samples were found for cancer type '{cancer_type}'."
         )
 
+    # We subset the expression matrix to the selected samples and align the metadata to those samples.
     cancer_data = data[cancer_samples]
     cancer_metadata = metadata_df.loc[cancer_samples].copy()
     return cancer_data, cancer_metadata
@@ -228,6 +243,8 @@ def subset_hallmark_genes(cancer_data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.D
         [("Resist_Apoptosis", g) for g in RESIST_APOPTOSIS_GENES]
     )
 
+    # We check for the presence of each requested hallmark gene in the dataset 
+    # build a table summarizing which genes were found.
     present_genes: List[str] = []
     for hallmark_name, gene in all_requested:
         present = gene in cancer_data.index
@@ -239,6 +256,7 @@ def subset_hallmark_genes(cancer_data: pd.DataFrame) -> Tuple[pd.DataFrame, pd.D
         if present:
             present_genes.append(gene)
 
+    # We create a subset of the expression matrix with only the present hallmark genes for downstream analysis.
     requested_df = pd.DataFrame(requested_rows)
     unique_present_genes = list(dict.fromkeys(present_genes))
     subset_df = cancer_data.loc[unique_present_genes].copy() if unique_present_genes else pd.DataFrame()
@@ -264,11 +282,14 @@ def compute_hallmark_scores(
     else:
         score_df["proliferative_score"] = pd.NA
 
+    # We check if any genes were present for each hallmark before computing the scores
+    # if not we fill the score with NA values.
     if apoptosis_present:
         score_df["apoptosis_resistance_score"] = hallmark_gene_data.loc[apoptosis_present].mean(axis=0)
     else:
         score_df["apoptosis_resistance_score"] = pd.NA
 
+    # We merge the scores with the cancer metadata so we have all sample-level information in one table for downstream plotting and modeling.
     merged = score_df.merge(cancer_metadata, left_index=True, right_index=True, how="left")
     return merged
 
@@ -339,6 +360,7 @@ def run_unsupervised_models(
         name="kmeans_cluster",
     ).astype(str)
 
+    # We add the cluster assignments to the PCA dataframe and the model metadata for downstream plotting and analysis.
     pca_df["kmeans_cluster"] = cluster_series
     model_metadata["kmeans_cluster"] = cluster_series
 
@@ -389,9 +411,7 @@ def make_summary_plots(
 
     stage_plot_col = "stage_simple" if "stage_simple" in merged_scores.columns else stage_col
 
-    # --------------------------------------------------
     # 1) Scatterplot of the two hallmark scores
-    # --------------------------------------------------
     plt.figure(figsize=(7, 5))
     sns.scatterplot(
         data=merged_scores,
@@ -408,9 +428,7 @@ def make_summary_plots(
     plt.show()
     plt.close()
 
-    # --------------------------------------------------
     # 2) Boxplot of hallmark scores by simplified stage
-    # --------------------------------------------------
     if stage_plot_col in merged_scores.columns:
         stage_plot_df = merged_scores[
             [stage_plot_col, "proliferative_score", "apoptosis_resistance_score"]
@@ -440,9 +458,7 @@ def make_summary_plots(
             plt.show()
             plt.close()
 
-    # --------------------------------------------------
     # 3) PCA colored by stage
-    # --------------------------------------------------
     pca_df = unsupervised_results["pca_df"]
 
     plt.figure(figsize=(7, 5))
@@ -450,7 +466,7 @@ def make_summary_plots(
         data=pca_df,
         x="PC1",
         y="PC2",
-        hue=stage_plot_col if stage_plot_col in pca_df.columns else None,
+        hue=stage_plot_col if stage_plot_col in pca_df.columns else None, # type: ignore
         alpha=0.85,
     )
     plt.title(
@@ -461,12 +477,10 @@ def make_summary_plots(
     plt.show()
     plt.close()
 
-    # --------------------------------------------------
     # 4) PCA colored by KMeans cluster
-    # --------------------------------------------------
     plt.figure(figsize=(7, 5))
     sns.scatterplot(
-        data=pca_df,
+        data=pca_df, # type: ignore
         x="PC1",
         y="PC2",
         hue="kmeans_cluster",
@@ -482,20 +496,18 @@ def make_summary_plots(
     plt.show()
     plt.close()
 
-    # --------------------------------------------------
     # 5) KMeans model-selection plot
-    # --------------------------------------------------
     cluster_eval_df = unsupervised_results["cluster_eval_df"]
 
     plt.figure(figsize=(6, 4))
     sns.lineplot(
-        data=cluster_eval_df,
+        data=cluster_eval_df, # type: ignore
         x="k",
         y="silhouette_score",
         marker="o",
     )
     plt.axvline(
-        x=unsupervised_results["best_k"],
+        x=unsupervised_results["best_k"], # type: ignore
         linestyle="--",
         color="black",
         label=f"best k = {unsupervised_results['best_k']}",
@@ -517,10 +529,10 @@ def make_summary_plots(
     if umap_df is not None:
         plt.figure(figsize=(7, 5))
         sns.scatterplot(
-            data=umap_df,
+            data=umap_df, # type: ignore
             x="UMAP1",
             y="UMAP2",
-            hue=stage_plot_col if stage_plot_col in umap_df.columns else None,
+            hue=stage_plot_col if stage_plot_col in umap_df.columns else None, # type: ignore
             alpha=0.85,
         )
         plt.title(f"{CANCER_TYPE}: UMAP of 40 hallmark genes")
@@ -531,7 +543,7 @@ def make_summary_plots(
 
         plt.figure(figsize=(7, 5))
         sns.scatterplot(
-            data=umap_df,
+            data=umap_df, # type: ignore
             x="UMAP1",
             y="UMAP2",
             hue="kmeans_cluster",
@@ -557,6 +569,8 @@ def run_eda() -> Dict[str, object]:
 
     data, metadata_df = load_data()
 
+    # We print out summaries and sanity checks at each step to verify that the data looks as expected 
+    # highlight key characteristics of the dataset.
     print("Loaded expression data.")
     print(data.head())
     print("\nExpression matrix shape (genes x samples):", data.shape)
@@ -568,6 +582,8 @@ def run_eda() -> Dict[str, object]:
     print("\nMetadata info:")
     print(metadata_df.info())
 
+    # We compute a global summary of the expression matrix to understand the overall distribution of expression values
+    #  identify any potential issues (e.g. all zeros, unexpected ranges).
     full_summary_df = summarize_expression_matrix(data)
     print("\nGlobal expression summary:")
     print(full_summary_df)
@@ -582,15 +598,20 @@ def run_eda() -> Dict[str, object]:
     print("\nTop 20 genes by average expression across the training set:")
     print(top_mean_expression)
 
+    # We assess the missingness in the metadata to understand which features are well-populated and which have a lot of missing values.
     missingness_df = report_missingness(metadata_df)
     print("\nMetadata missingness summary:")
     print(missingness_df.head(20))
 
+    # We subset the data to the selected cancer type and verify that the subsetting worked correctly
+    # checking the shapes and printing out some of the metadata.
     cancer_data, cancer_metadata = subset_cancer_type(data, metadata_df, CANCER_TYPE)
     print(f"\nSubset to {CANCER_TYPE}:")
     print("Expression shape (genes x selected samples):", cancer_data.shape)
     print("Metadata shape (selected samples x features):", cancer_metadata.shape)
 
+    # We clean the metadata for the selected cancer type, which includes finding the stage column, creating simplified stage labels
+    # creating a binary stage label for future modeling.
     cancer_metadata, stage_col = clean_cancer_metadata(cancer_metadata)
 
     if "stage_simple" in cancer_metadata.columns:
@@ -605,6 +626,7 @@ def run_eda() -> Dict[str, object]:
     print("\nRequested hallmark genes and whether they were found:")
     print(hallmark_gene_presence)
 
+    # We check if any of the requested hallmark genes were present in the dataset before proceeding with downstream analysis.
     if hallmark_gene_data.empty:
         raise ValueError(
             "None of the requested hallmark genes were found in the dataset. "
@@ -614,6 +636,7 @@ def run_eda() -> Dict[str, object]:
     print("\nHallmark gene expression subset:")
     print(hallmark_gene_data.head())
 
+    # We compute summary statistics for the hallmark genes to understand their expression distribution within the selected cancer type.
     hallmark_gene_stats = pd.DataFrame({
         "mean_expression": hallmark_gene_data.mean(axis=1),
         "median_expression": hallmark_gene_data.median(axis=1),
@@ -623,6 +646,7 @@ def run_eda() -> Dict[str, object]:
     print("\nHallmark gene statistics within the selected cancer type:")
     print(hallmark_gene_stats)
 
+    # We compute the hallmark scores for each sample and merge them with the metadata for downstream analysis and plotting.
     if stage_col is not None:
         print(f"\nUsing metadata stage column: {stage_col}")
         print(cancer_metadata[stage_col].value_counts(dropna=False))
@@ -633,6 +657,7 @@ def run_eda() -> Dict[str, object]:
     print("\nSample-level hallmark score table:")
     print(merged_scores.head())
 
+    # We run unsupervised models (PCA, KMeans, optional UMAP) on the hallmark gene expression data to explore potential clusters and patterns in the data.
     unsupervised_results = run_unsupervised_models(hallmark_gene_data, merged_scores)
 
     print("\nKMeans model selection summary:")
@@ -652,6 +677,7 @@ def run_eda() -> Dict[str, object]:
     hallmark_gene_stats.to_csv(RESULTS_DIR / f"{CANCER_TYPE}_hallmark_gene_stats.csv")
     merged_scores.to_csv(RESULTS_DIR / f"{CANCER_TYPE}_sample_level_hallmark_scores.csv")
 
+    # We save the cluster evaluation metrics and the PCA / UMAP coordinates with cluster assignments for downstream plotting and analysis in the notebook.
     unsupervised_results["cluster_eval_df"].to_csv(
         RESULTS_DIR / f"{CANCER_TYPE}_kmeans_cluster_evaluation.csv",
         index=False,
@@ -660,6 +686,7 @@ def run_eda() -> Dict[str, object]:
         RESULTS_DIR / f"{CANCER_TYPE}_PCA_coordinates_with_clusters.csv"
     )
 
+    # We check if UMAP results are available before trying to save them, since UMAP is an optional dependency.
     if unsupervised_results["umap_df"] is not None:
         unsupervised_results["umap_df"].to_csv(
             RESULTS_DIR / f"{CANCER_TYPE}_UMAP_coordinates_with_clusters.csv"
@@ -671,11 +698,13 @@ def run_eda() -> Dict[str, object]:
         nonna_df.to_csv(RESULTS_DIR / "metadata_percent_nonNA_by_cancer_type_copy.csv", index=False)
         print("\nCopied metadata completeness table to results folder.")
 
+    # Finally, we create and save summary plots to visualize the hallmark scores, PCA clusters, and KMeans model selection results.
     make_summary_plots(hallmark_gene_data, merged_scores, stage_col, unsupervised_results,)
 
     print("\nEDA complete. Results were saved to:")
     print(RESULTS_DIR)
 
+    # We return all the major tables and results as a dictionary so they can be easily reused in the notebook without needing to reload or recompute them.
     return {
         "data": data,
         "metadata": metadata_df,
@@ -696,5 +725,7 @@ def run_eda() -> Dict[str, object]:
 # %%
 # Script entry point
 ####################################################
+# We wrap the entire EDA workflow in a function and call it in the main block. 
+# This allows us to easily reuse the function in the notebook and also keeps the script organized.
 if __name__ == "__main__":
     run_eda()
