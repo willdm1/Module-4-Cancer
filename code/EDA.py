@@ -375,16 +375,16 @@ def make_summary_plots(
     stage_col: Optional[str],
     unsupervised_results: Dict[str, object],
 ) -> None:
-    """
-    Generate the main Check-In 2 figures:
-    1) hallmark-score scatterplot
-    2) hallmark-score boxplot by simplified stage
-    3) PCA colored by stage
-    4) PCA colored by KMeans cluster
-    5) silhouette score vs. k for KMeans
-    6) optional UMAP colored by stage
-    7) optional UMAP colored by cluster
-    """
+  
+    # Here is what we do:
+    # 1) hallmark-score scatterplot
+    # 2) hallmark-score boxplot by simplified stage
+    # 3) PCA colored by stage
+    # 4) PCA colored by KMeans cluster
+    # 5) silhouette score vs. k for KMeans
+    # 6) optional UMAP colored by stage
+    # 7) optional UMAP colored by cluster
+  
     sns.set_theme(style="whitegrid")
 
     stage_plot_col = "stage_simple" if "stage_simple" in merged_scores.columns else stage_col
