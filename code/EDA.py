@@ -19,14 +19,14 @@ from typing import Dict, List, Optional, Tuple
 
 import matplotlib.pyplot as plt
 import pandas as pd
-import seaborn as sns
+import seaborn as sns # type: ignore
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
 try:
-    import umap.umap_ as umap
+    import umap.umap_ as umap # type: ignore
     HAS_UMAP = True
 except ImportError:
     HAS_UMAP = False
@@ -463,7 +463,7 @@ def make_summary_plots(
 
     plt.figure(figsize=(7, 5))
     sns.scatterplot(
-        data=pca_df,
+        data=pca_df, # type: ignore
         x="PC1",
         y="PC2",
         hue=stage_plot_col if stage_plot_col in pca_df.columns else None, # type: ignore
@@ -678,17 +678,17 @@ def run_eda() -> Dict[str, object]:
     merged_scores.to_csv(RESULTS_DIR / f"{CANCER_TYPE}_sample_level_hallmark_scores.csv")
 
     # We save the cluster evaluation metrics and the PCA / UMAP coordinates with cluster assignments for downstream plotting and analysis in the notebook.
-    unsupervised_results["cluster_eval_df"].to_csv(
+    unsupervised_results["cluster_eval_df"].to_csv( # type: ignore
         RESULTS_DIR / f"{CANCER_TYPE}_kmeans_cluster_evaluation.csv",
         index=False,
     )
-    unsupervised_results["pca_df"].to_csv(
+    unsupervised_results["pca_df"].to_csv( # type: ignore
         RESULTS_DIR / f"{CANCER_TYPE}_PCA_coordinates_with_clusters.csv"
     )
 
     # We check if UMAP results are available before trying to save them, since UMAP is an optional dependency.
     if unsupervised_results["umap_df"] is not None:
-        unsupervised_results["umap_df"].to_csv(
+        unsupervised_results["umap_df"].to_csv( # type: ignore
             RESULTS_DIR / f"{CANCER_TYPE}_UMAP_coordinates_with_clusters.csv"
         )
 
