@@ -406,6 +406,7 @@ def make_summary_plots(
     # 5) silhouette score vs. k for KMeans
     # 6) optional UMAP colored by stage
     # 7) optional UMAP colored by cluster
+    # 8) DB SCAN Clustering 
   
     sns.set_theme(style="whitegrid")
 
@@ -559,7 +560,64 @@ def make_summary_plots(
         plt.show()
         plt.close()
 
-# %%
+    # DBSCAN CLUSTERING - to be updated more before next check in and added to notebook
+
+from sklearn.cluster import DBSCAN
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+def make_summary_plots(
+    hallmark_gene_data,
+    merged_scores,
+    stage_col,
+    unsupervised_results,
+):
+    sns.set_theme(style="whitegrid")
+
+    # Pull PCA dataframe from your unsupervised results
+    pca_df = unsupervised_results["pca_df"]
+
+    # Pull the original feature matrix used for clustering
+    X = unsupervised_results["X"]
+
+    # Run DBSCAN on the feature data
+    dbscan = DBSCAN(eps=1.5, min_samples=5)
+    y_dbscan = dbscan.fit_predict(X)
+
+    # Save DBSCAN labels into the PCA dataframe
+    pca_df["dbscan_cluster"] = y_dbscan.astype(str)
+
+    color_col = "stage_simple" if "stage_simple" in pca_df.columns else stage_col
+
+    # Print cluster labels
+    print("DBSCAN cluster labels:")
+    print(y_dbscan)
+
+    # Count clusters and noise points
+    n_clusters = len(set(y_dbscan)) - (1 if -1 in y_dbscan else 0)
+    n_noise = list(y_dbscan).count(-1)
+
+    print("Number of clusters found:", n_clusters)
+    print("Number of noise points:", n_noise)
+
+    plt.figure(figsize=(8, 6))
+    sns.scatterplot(
+        data=pca_df,
+        x="PC1",
+        y="PC2",
+        hue="dbscan_cluster",     # clusters
+        style=color_col,          # stage
+        palette="tab10",
+        alpha=0.9,
+    )
+    plt.title("DBSCAN clusters with tumor stage overlay")
+    plt.xlabel("PC1")
+    plt.ylabel("PC2")
+    plt.tight_layout()
+    plt.show()
+
+    # %%
 # Main analysis workflow
 ####################################################
 def run_eda() -> Dict[str, object]:
