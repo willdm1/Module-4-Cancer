@@ -522,9 +522,7 @@ def make_summary_plots(
     plt.show()
     plt.close()
 
-    # --------------------------------------------------
-    # 6/7) Optional UMAP plots
-    # --------------------------------------------------
+    # 6/7) UMAP plots
     umap_df = unsupervised_results["umap_df"]
 
     if umap_df is not None:
