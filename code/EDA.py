@@ -560,7 +560,7 @@ def make_summary_plots(
         plt.show()
         plt.close()
 
-    # DBSCAN CLUSTERING - to be updated more before next check in and added to notebook
+    # DBSCAN CLUSTERING 
 
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
@@ -582,7 +582,7 @@ def make_summary_plots(
     X = unsupervised_results["X"]
 
     # Run DBSCAN on the feature data
-    dbscan = DBSCAN(eps=1.5, min_samples=5)
+    dbscan = DBSCAN(eps=2.0, min_samples=5)
     y_dbscan = dbscan.fit_predict(X)
 
     # Save DBSCAN labels into the PCA dataframe
