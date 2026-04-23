@@ -1,4 +1,4 @@
-# Exploratory data analysis (EDA) on the Module 4 cancer dataset
+# main.py Module 4 cancer dataset
 # Updated: 4/18/2026
 # Written by Will and Dani
 
@@ -168,26 +168,6 @@ def clean_cancer_metadata(cancer_metadata: pd.DataFrame) -> Tuple[pd.DataFrame, 
         )
 
     return cancer_metadata, stage_col
-
-def load_data() -> Tuple[pd.DataFrame, pd.DataFrame]:
-
-    # Load the training expression matrix and the training metadata table.
-    # Expression data are expected to be genes x samples with log2(TPM+1) values.
-    # Metadata are expected to be samples x features.
-    if not TRAINING_DATA_PATH.exists():
-        raise FileNotFoundError(
-            f"Could not find expression matrix at: {TRAINING_DATA_PATH}\n"
-            "Check that the training CSV is present in the repo data folder."
-        )
-    if not TRAINING_METADATA_PATH.exists():
-        raise FileNotFoundError(
-            f"Could not find metadata table at: {TRAINING_METADATA_PATH}\n"
-            "Check that the metadata CSV is present in the repo data folder."
-        )
-
-    data = pd.read_csv(TRAINING_DATA_PATH, index_col=0, header=0)
-    metadata_df = pd.read_csv(TRAINING_METADATA_PATH, index_col=0, header=0)
-    return data, metadata_df
 
 def load_split_data(
     expression_path: Path,
@@ -781,7 +761,8 @@ def run_logistic_regression_experiment(
         "coef_df": coef_df,
     }
 
-    def run_supervised_modeling() -> Dict[str, object]:
+
+def run_supervised_modeling() -> Dict[str, object]:
     train_expr, train_meta = load_split_data(TRAINING_DATA_PATH, TRAINING_METADATA_PATH)
     valid_expr, valid_meta = load_split_data(VALIDATION_DATA_PATH, VALIDATION_METADATA_PATH)
 
@@ -815,9 +796,18 @@ def run_logistic_regression_experiment(
         ignore_index=True,
     )
 
-    comparison_df.to_csv(RESULTS_DIR / f"{CANCER_TYPE}_supervised_model_metrics.csv", index=False)
-    baseline["coef_df"].to_csv(RESULTS_DIR / f"{CANCER_TYPE}_baseline_logreg_coefficients.csv", index=False)
-    improved["coef_df"].to_csv(RESULTS_DIR / f"{CANCER_TYPE}_improved_logreg_coefficients.csv", index=False)
+    comparison_df.to_csv(
+        RESULTS_DIR / f"{CANCER_TYPE}_supervised_model_metrics.csv",
+        index=False,
+    )
+    baseline["coef_df"].to_csv(
+        RESULTS_DIR / f"{CANCER_TYPE}_baseline_logreg_coefficients.csv",
+        index=False,
+    )
+    improved["coef_df"].to_csv(
+        RESULTS_DIR / f"{CANCER_TYPE}_improved_logreg_coefficients.csv",
+        index=False,
+    )
 
     return {
         "train_processed": train_processed,
@@ -968,7 +958,6 @@ def run_eda() -> Dict[str, object]:
 
     # Finally, we create and save summary plots to visualize the hallmark scores, PCA clusters, and KMeans model selection results.
     make_summary_plots(hallmark_gene_data, merged_scores, stage_col, unsupervised_results,)
-
     print("\nEDA complete. Results were saved to:")
     print(RESULTS_DIR)
 
@@ -996,4 +985,8 @@ def run_eda() -> Dict[str, object]:
 # We wrap the entire EDA workflow in a function and call it in the main block. 
 # This allows us to easily reuse the function in the notebook and also keeps the script organized.
 if __name__ == "__main__":
-    run_eda()
+    eda_results = run_eda()
+
+    supervised_results = run_supervised_modeling()
+    print("\nSupervised modeling comparison:")
+    print(supervised_results["comparison_df"])
