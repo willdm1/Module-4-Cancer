@@ -31,6 +31,19 @@ try:
 except ImportError:
     HAS_UMAP = False
 
+import numpy as np
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    balanced_accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+    RocCurveDisplay,
+)
 
 # %%
 # Project paths and analysis settings
@@ -53,6 +66,8 @@ RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 # We hardcode the paths to the training data and metadata CSVs, which are expected to be in the data folder.
 TRAINING_DATA_PATH = DATA_DIR / "TRAINING_SET_GSE62944_subsample_log2TPM.csv"
 TRAINING_METADATA_PATH = DATA_DIR / "TRAINING_SET_GSE62944_metadata.csv"
+VALIDATION_DATA_PATH = DATA_DIR / "VALIDATION_SET_GSE62944_subsample_log2TPM.csv"
+VALIDATION_METADATA_PATH = DATA_DIR / "VALIDATION_SET_GSE62944_metadata.csv"
 NONNA_PATH = DATA_DIR / "GSE62944_metadata_percent_nonNA_by_cancer_type.csv"
 
 # We are focusin this first check-in on one cancer type to reduce biological heterogeneity.
@@ -174,6 +189,22 @@ def load_data() -> Tuple[pd.DataFrame, pd.DataFrame]:
     metadata_df = pd.read_csv(TRAINING_METADATA_PATH, index_col=0, header=0)
     return data, metadata_df
 
+def load_split_data(
+    expression_path: Path,
+    metadata_path: Path,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    if not expression_path.exists():
+        raise FileNotFoundError(f"Could not find expression matrix at: {expression_path}")
+    if not metadata_path.exists():
+        raise FileNotFoundError(f"Could not find metadata table at: {metadata_path}")
+
+    data = pd.read_csv(expression_path, index_col=0, header=0)
+    metadata_df = pd.read_csv(metadata_path, index_col=0, header=0)
+    return data, metadata_df
+
+
+def load_data() -> Tuple[pd.DataFrame, pd.DataFrame]:
+    return load_split_data(TRAINING_DATA_PATH, TRAINING_METADATA_PATH)
 
 def summarize_expression_matrix(data: pd.DataFrame) -> pd.DataFrame:
 
@@ -292,6 +323,90 @@ def compute_hallmark_scores(
     # We merge the scores with the cancer metadata so we have all sample-level information in one table for downstream plotting and modeling.
     merged = score_df.merge(cancer_metadata, left_index=True, right_index=True, how="left")
     return merged
+
+def build_supervised_features(
+    hallmark_gene_data: pd.DataFrame,
+    merged_scores: pd.DataFrame,
+    include_summary_features: bool = False,
+) -> pd.DataFrame:
+    # Start with raw hallmark-gene expression, samples x genes
+    X = hallmark_gene_data.T.apply(pd.to_numeric, errors="coerce").copy()
+
+    if include_summary_features:
+        extra_cols = []
+
+        if "proliferative_score" in merged_scores.columns:
+            X["proliferative_score"] = pd.to_numeric(
+                merged_scores.loc[X.index, "proliferative_score"], errors="coerce"
+            )
+            extra_cols.append("proliferative_score")
+
+        if "apoptosis_resistance_score" in merged_scores.columns:
+            X["apoptosis_resistance_score"] = pd.to_numeric(
+                merged_scores.loc[X.index, "apoptosis_resistance_score"], errors="coerce"
+            )
+            extra_cols.append("apoptosis_resistance_score")
+
+        if "age_at_diagnosis" in merged_scores.columns:
+            X["age_at_diagnosis"] = pd.to_numeric(
+                merged_scores.loc[X.index, "age_at_diagnosis"], errors="coerce"
+            )
+            extra_cols.append("age_at_diagnosis")
+
+        # Fill any missing values in added summary features with training-column medians later
+        # For now, leave NaN in place
+
+    return X
+
+def build_stage_binary_target(merged_scores: pd.DataFrame) -> pd.Series:
+    y = merged_scores["stage_binary"].copy()
+    y = y.map({"Early": 0, "Late": 1})
+    return y
+
+def align_feature_matrices(
+    X_train: pd.DataFrame,
+    X_valid: pd.DataFrame,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    common_cols = [col for col in X_train.columns if col in X_valid.columns]
+    X_train = X_train[common_cols].copy()
+    X_valid = X_valid[common_cols].copy()
+    return X_train, X_valid
+
+def scale_train_valid(
+    X_train: pd.DataFrame,
+    X_valid: pd.DataFrame,
+) -> Tuple[np.ndarray, np.ndarray, StandardScaler]:
+    # Fill missing values using training medians only
+    train_medians = X_train.median(axis=0)
+    X_train_filled = X_train.fillna(train_medians)
+    X_valid_filled = X_valid.fillna(train_medians)
+
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train_filled)
+    X_valid_scaled = scaler.transform(X_valid_filled)
+
+    return X_train_scaled, X_valid_scaled, scaler
+
+def summarize_classification_metrics(
+    y_true: pd.Series,
+    y_pred: np.ndarray,
+    y_score: np.ndarray,
+    split_name: str,
+    model_name: str,
+) -> pd.DataFrame:
+    metrics = {
+        "model": model_name,
+        "split": split_name,
+        "n_samples": int(len(y_true)),
+        "accuracy": float(accuracy_score(y_true, y_pred)),
+        "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
+        "precision": float(precision_score(y_true, y_pred, zero_division=0)),
+        "recall": float(recall_score(y_true, y_pred, zero_division=0)),
+        "f1": float(f1_score(y_true, y_pred, zero_division=0)),
+        "auroc": float(roc_auc_score(y_true, y_score)),
+    }
+    return pd.DataFrame([metrics])
+
 
 def run_unsupervised_models(
     hallmark_gene_data: pd.DataFrame,
@@ -558,62 +673,159 @@ def make_summary_plots(
         plt.show()
         plt.close()
 
-    # DBSCAN CLUSTERING 
+def prepare_modeling_split(
+    expression_df: pd.DataFrame,
+    metadata_df: pd.DataFrame,
+    cancer_type: str,
+) -> Dict[str, object]:
+    cancer_data, cancer_metadata = subset_cancer_type(expression_df, metadata_df, cancer_type)
+    cancer_metadata, stage_col = clean_cancer_metadata(cancer_metadata)
 
-from sklearn.cluster import DBSCAN
-import matplotlib.pyplot as plt
-import seaborn as sns
+    hallmark_gene_data, hallmark_gene_presence = subset_hallmark_genes(cancer_data)
+    if hallmark_gene_data.empty:
+        raise ValueError("No requested hallmark genes were found in this split.")
 
+    merged_scores = compute_hallmark_scores(hallmark_gene_data, cancer_metadata)
 
-def make_summary_plots(
-    hallmark_gene_data,
-    merged_scores,
-    stage_col,
-    unsupervised_results,
-):
-    sns.set_theme(style="whitegrid")
+    return {
+        "cancer_data": cancer_data,
+        "cancer_metadata": cancer_metadata,
+        "hallmark_gene_data": hallmark_gene_data,
+        "hallmark_gene_presence": hallmark_gene_presence,
+        "merged_scores": merged_scores,
+        "stage_col": stage_col,
+    }
 
-    # Pull PCA dataframe from your unsupervised results
-    pca_df = unsupervised_results["pca_df"]
-
-    # Pull the original feature matrix used for clustering
-    X = unsupervised_results["X"]
-
-    # Run DBSCAN on the feature data
-    dbscan = DBSCAN(eps=2.0, min_samples=5)
-    y_dbscan = dbscan.fit_predict(X)
-
-    # Save DBSCAN labels into the PCA dataframe
-    pca_df["dbscan_cluster"] = y_dbscan.astype(str)
-
-    color_col = "stage_simple" if "stage_simple" in pca_df.columns else stage_col
-
-    # Print cluster labels
-    print("DBSCAN cluster labels:")
-    print(y_dbscan)
-
-    # Count clusters and noise points
-    n_clusters = len(set(y_dbscan)) - (1 if -1 in y_dbscan else 0)
-    n_noise = list(y_dbscan).count(-1)
-
-    print("Number of clusters found:", n_clusters)
-    print("Number of noise points:", n_noise)
-
-    plt.figure(figsize=(8, 6))
-    sns.scatterplot(
-        data=pca_df,
-        x="PC1",
-        y="PC2",
-        hue="dbscan_cluster",     # clusters
-        style=color_col,          # stage
-        palette="tab10",
-        alpha=0.9,
+def run_logistic_regression_experiment(
+    train_processed: Dict[str, object],
+    valid_processed: Dict[str, object],
+    include_summary_features: bool,
+    C_value: float,
+    class_weight: Optional[str],
+    model_name: str,
+) -> Dict[str, object]:
+    X_train = build_supervised_features(
+        train_processed["hallmark_gene_data"],  # type: ignore
+        train_processed["merged_scores"],       # type: ignore
+        include_summary_features=include_summary_features,
     )
-    plt.title("DBSCAN clusters with tumor stage overlay")
-    plt.xlabel("PC1")
-    plt.ylabel("PC2")
-    plt.tight_layout()
-    plt.show()
+    X_valid = build_supervised_features(
+        valid_processed["hallmark_gene_data"],  # type: ignore
+        valid_processed["merged_scores"],       # type: ignore
+        include_summary_features=include_summary_features,
+    )
+
+    y_train = build_stage_binary_target(train_processed["merged_scores"])  # type: ignore
+    y_valid = build_stage_binary_target(valid_processed["merged_scores"])  # type: ignore
+
+    # Keep only samples with known Early/Late labels
+    train_keep = y_train.notna()
+    valid_keep = y_valid.notna()
+
+    X_train = X_train.loc[train_keep]
+    X_valid = X_valid.loc[valid_keep]
+    y_train = y_train.loc[train_keep].astype(int)
+    y_valid = y_valid.loc[valid_keep].astype(int)
+
+    X_train, X_valid = align_feature_matrices(X_train, X_valid)
+    X_train_scaled, X_valid_scaled, scaler = scale_train_valid(X_train, X_valid)
+
+    clf = LogisticRegression(
+        C=C_value,
+        class_weight=class_weight,
+        max_iter=5000,
+        random_state=42,
+    )
+    clf.fit(X_train_scaled, y_train)
+
+    train_score = clf.predict_proba(X_train_scaled)[:, 1]
+    valid_score = clf.predict_proba(X_valid_scaled)[:, 1]
+
+    train_pred = (train_score >= 0.5).astype(int)
+    valid_pred = (valid_score >= 0.5).astype(int)
+
+    train_metrics = summarize_classification_metrics(
+        y_train, train_pred, train_score, "train", model_name
+    )
+    valid_metrics = summarize_classification_metrics(
+        y_valid, valid_pred, valid_score, "validation", model_name
+    )
+
+    train_cm = confusion_matrix(y_train, train_pred)
+    valid_cm = confusion_matrix(y_valid, valid_pred)
+
+    feature_names = X_train.columns.tolist()
+    coef_df = pd.DataFrame({
+        "feature": feature_names,
+        "coefficient": clf.coef_[0],
+        "abs_coefficient": np.abs(clf.coef_[0]),
+    }).sort_values("abs_coefficient", ascending=False)
+
+    return {
+        "model_name": model_name,
+        "classifier": clf,
+        "scaler": scaler,
+        "X_train": X_train,
+        "X_valid": X_valid,
+        "y_train": y_train,
+        "y_valid": y_valid,
+        "train_metrics": train_metrics,
+        "valid_metrics": valid_metrics,
+        "all_metrics": pd.concat([train_metrics, valid_metrics], ignore_index=True),
+        "train_confusion_matrix": train_cm,
+        "valid_confusion_matrix": valid_cm,
+        "train_scores": train_score,
+        "valid_scores": valid_score,
+        "train_preds": train_pred,
+        "valid_preds": valid_pred,
+        "coef_df": coef_df,
+    }
+
+    def run_supervised_modeling() -> Dict[str, object]:
+    train_expr, train_meta = load_split_data(TRAINING_DATA_PATH, TRAINING_METADATA_PATH)
+    valid_expr, valid_meta = load_split_data(VALIDATION_DATA_PATH, VALIDATION_METADATA_PATH)
+
+    train_processed = prepare_modeling_split(train_expr, train_meta, CANCER_TYPE)
+    valid_processed = prepare_modeling_split(valid_expr, valid_meta, CANCER_TYPE)
+
+    # Baseline model:
+    # raw 40 hallmark genes only, default class weighting
+    baseline = run_logistic_regression_experiment(
+        train_processed=train_processed,
+        valid_processed=valid_processed,
+        include_summary_features=False,
+        C_value=1.0,
+        class_weight=None,
+        model_name="baseline_logreg_40genes",
+    )
+
+    # Improved model:
+    # raw 40 genes + hallmark summary scores + age, with balanced classes and stronger regularization
+    improved = run_logistic_regression_experiment(
+        train_processed=train_processed,
+        valid_processed=valid_processed,
+        include_summary_features=True,
+        C_value=0.1,
+        class_weight="balanced",
+        model_name="improved_logreg_40genes_plus_scores_age_balanced",
+    )
+
+    comparison_df = pd.concat(
+        [baseline["all_metrics"], improved["all_metrics"]],
+        ignore_index=True,
+    )
+
+    comparison_df.to_csv(RESULTS_DIR / f"{CANCER_TYPE}_supervised_model_metrics.csv", index=False)
+    baseline["coef_df"].to_csv(RESULTS_DIR / f"{CANCER_TYPE}_baseline_logreg_coefficients.csv", index=False)
+    improved["coef_df"].to_csv(RESULTS_DIR / f"{CANCER_TYPE}_improved_logreg_coefficients.csv", index=False)
+
+    return {
+        "train_processed": train_processed,
+        "valid_processed": valid_processed,
+        "baseline": baseline,
+        "improved": improved,
+        "comparison_df": comparison_df,
+    }
 
     # %%
 # Main analysis workflow
