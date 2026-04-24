@@ -43,6 +43,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
     RocCurveDisplay,
+    ConfusionMatrixDisplay,
 )
 
 # %%
@@ -387,6 +388,55 @@ def summarize_classification_metrics(
     }
     return pd.DataFrame([metrics])
 
+def save_supervised_model_figures(
+    baseline: Dict[str, object],
+    improved: Dict[str, object],
+) -> None:
+   # 1) Validation ROC comparison
+    fig, ax = plt.subplots(figsize=(7, 5))
+
+    RocCurveDisplay.from_predictions(
+        baseline["y_valid"],
+        baseline["valid_scores"],
+        name="Baseline",
+        ax=ax,
+    )
+
+    RocCurveDisplay.from_predictions(
+        improved["y_valid"],
+        improved["valid_scores"],
+        name="Improved",
+        ax=ax,
+    )
+
+    ax.plot([0, 1], [0, 1], linestyle="--", color="gray")
+    ax.set_title(f"{CANCER_TYPE}: Validation ROC comparison")
+    ax.legend(loc="lower right")
+    plt.tight_layout()
+    plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_validation_ROC_comparison.png", dpi=300)
+    plt.show()
+    plt.close()
+
+    # 2) Validation confusion matrices
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    ConfusionMatrixDisplay(
+        confusion_matrix=baseline["valid_confusion_matrix"],
+        display_labels=["Early", "Late"],
+    ).plot(ax=axes[0], colorbar=False)
+    axes[0].set_title("Baseline model")
+
+    ConfusionMatrixDisplay(
+        confusion_matrix=improved["valid_confusion_matrix"],
+        display_labels=["Early", "Late"],
+    ).plot(ax=axes[1], colorbar=False)
+    axes[1].set_title("Improved model")
+
+    fig.suptitle(f"{CANCER_TYPE}: Validation confusion matrices")
+    plt.tight_layout()
+    plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_validation_confusion_matrices.png", dpi=300)
+    plt.show()
+    plt.close()
 
 def run_unsupervised_models(
     hallmark_gene_data: pd.DataFrame,
@@ -808,6 +858,8 @@ def run_supervised_modeling() -> Dict[str, object]:
         RESULTS_DIR / f"{CANCER_TYPE}_improved_logreg_coefficients.csv",
         index=False,
     )
+
+    save_supervised_model_figures(baseline, improved)
 
     return {
         "train_processed": train_processed,
