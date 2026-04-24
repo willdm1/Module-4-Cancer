@@ -339,11 +339,14 @@ def build_supervised_features(
 
     return X
 
+# We build a binary target variable for supervised classification based on the simplified stage labels.
 def build_stage_binary_target(merged_scores: pd.DataFrame) -> pd.Series:
     y = merged_scores["stage_binary"].copy()
     y = y.map({"Early": 0, "Late": 1})
     return y
 
+# We align the training and validation feature matrices to have the same columns in the same order, keeping only the features that are present in both splits. 
+# This is important because some hallmark genes may be missing in one split but not the other
 def align_feature_matrices(
     X_train: pd.DataFrame,
     X_valid: pd.DataFrame,
@@ -353,6 +356,7 @@ def align_feature_matrices(
     X_valid = X_valid[common_cols].copy()
     return X_train, X_valid
 
+# We scale the training and validation feature matrices using StandardScaler, fitting only on the training data to avoid data leakage.
 def scale_train_valid(
     X_train: pd.DataFrame,
     X_valid: pd.DataFrame,
@@ -368,6 +372,8 @@ def scale_train_valid(
 
     return X_train_scaled, X_valid_scaled, scaler
 
+# We compute a variety of classification metrics to evaluate model performance on the training and validation sets
+# includes accuracy, balanced accuracy, precision, recall, F1 score, and AUROC.
 def summarize_classification_metrics(
     y_true: pd.Series,
     y_pred: np.ndarray,
@@ -388,6 +394,7 @@ def summarize_classification_metrics(
     }
     return pd.DataFrame([metrics])
 
+# We create summary figures to compare the baseline and improved supervised models, including validation ROC curves and confusion matrices.
 def save_supervised_model_figures(
     baseline: Dict[str, object],
     improved: Dict[str, object],
@@ -396,15 +403,15 @@ def save_supervised_model_figures(
     fig, ax = plt.subplots(figsize=(7, 5))
 
     RocCurveDisplay.from_predictions(
-        baseline["y_valid"],
-        baseline["valid_scores"],
+        baseline["y_valid"], # type: ignore
+        baseline["valid_scores"], # type: ignore
         name="Baseline",
         ax=ax,
     )
 
     RocCurveDisplay.from_predictions(
-        improved["y_valid"],
-        improved["valid_scores"],
+        improved["y_valid"], # type: ignore
+        improved["valid_scores"], # type: ignore
         name="Improved",
         ax=ax,
     )
@@ -421,13 +428,13 @@ def save_supervised_model_figures(
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
     ConfusionMatrixDisplay(
-        confusion_matrix=baseline["valid_confusion_matrix"],
+        confusion_matrix=baseline["valid_confusion_matrix"], # type: ignore
         display_labels=["Early", "Late"],
     ).plot(ax=axes[0], colorbar=False)
     axes[0].set_title("Baseline model")
 
     ConfusionMatrixDisplay(
-        confusion_matrix=improved["valid_confusion_matrix"],
+        confusion_matrix=improved["valid_confusion_matrix"], # type: ignore
         display_labels=["Early", "Late"],
     ).plot(ax=axes[1], colorbar=False)
     axes[1].set_title("Improved model")
@@ -438,6 +445,8 @@ def save_supervised_model_figures(
     plt.show()
     plt.close()
 
+# We run unsupervised models including PCA, KMeans clustering, and optionally UMAP to explore the structure of the hallmark gene expression data 
+# we find its relationship to tumor stage.
 def run_unsupervised_models(
     hallmark_gene_data: pd.DataFrame,
     merged_scores: pd.DataFrame,
@@ -536,6 +545,7 @@ def run_unsupervised_models(
         "umap_df": umap_df,
     }
 
+# We create summary figures to compare the baseline and improved supervised models, including validation ROC curves and confusion matrices.
 def make_summary_plots(
     hallmark_gene_data: pd.DataFrame,
     merged_scores: pd.DataFrame,
@@ -703,6 +713,7 @@ def make_summary_plots(
         plt.show()
         plt.close()
 
+# We run supervised modeling experiments using logistic regression to predict Early vs. Late stage based on the hallmark gene expression data and summary scores.
 def prepare_modeling_split(
     expression_df: pd.DataFrame,
     metadata_df: pd.DataFrame,
@@ -726,6 +737,7 @@ def prepare_modeling_split(
         "stage_col": stage_col,
     }
 
+# We run logistic regression experiments with different feature sets and regularization parameters to predict Early vs. Late stage based on the hallmark gene expression data and summary scores.
 def run_logistic_regression_experiment(
     train_processed: Dict[str, object],
     valid_processed: Dict[str, object],
@@ -811,7 +823,7 @@ def run_logistic_regression_experiment(
         "coef_df": coef_df,
     }
 
-
+# We run the complete supervised modeling workflow, including data preparation, model training, evaluation, and figure generation.
 def run_supervised_modeling() -> Dict[str, object]:
     train_expr, train_meta = load_split_data(TRAINING_DATA_PATH, TRAINING_METADATA_PATH)
     valid_expr, valid_meta = load_split_data(VALIDATION_DATA_PATH, VALIDATION_METADATA_PATH)
@@ -842,7 +854,7 @@ def run_supervised_modeling() -> Dict[str, object]:
     )
 
     comparison_df = pd.concat(
-        [baseline["all_metrics"], improved["all_metrics"]],
+        [baseline["all_metrics"], improved["all_metrics"]], # type: ignore
         ignore_index=True,
     )
 
@@ -850,11 +862,11 @@ def run_supervised_modeling() -> Dict[str, object]:
         RESULTS_DIR / f"{CANCER_TYPE}_supervised_model_metrics.csv",
         index=False,
     )
-    baseline["coef_df"].to_csv(
+    baseline["coef_df"].to_csv( # type: ignore
         RESULTS_DIR / f"{CANCER_TYPE}_baseline_logreg_coefficients.csv",
         index=False,
     )
-    improved["coef_df"].to_csv(
+    improved["coef_df"].to_csv( # type: ignore
         RESULTS_DIR / f"{CANCER_TYPE}_improved_logreg_coefficients.csv",
         index=False,
     )
