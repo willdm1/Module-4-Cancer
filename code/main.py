@@ -1,5 +1,5 @@
 # main.py Module 4 cancer dataset
-# Updated: 4/18/2026
+# Updated: 4/28/2026
 # Written by Will and Dani
 
 # Github sources we used: 
@@ -9,6 +9,13 @@
 # pandas repository: https://github.com/pandas-dev/pandas
 
 # Follows the 'example_EDA.py' format from our class
+
+# Final supervised workflow:
+# 1) train baseline and improved models on TRAINING
+# 2) compare on VALIDATION
+# 3) choose final model by validation AUROC
+# 4) apply the selected final model once to unseen TEST data
+# 5) report final out-of-sample metrics and figures
 
 # We are loading the fils and exploring the data with pandas / scikit-learn
 # %%p
@@ -70,6 +77,8 @@ TRAINING_METADATA_PATH = DATA_DIR / "TRAINING_SET_GSE62944_metadata.csv"
 VALIDATION_DATA_PATH = DATA_DIR / "VALIDATION_SET_GSE62944_subsample_log2TPM.csv"
 VALIDATION_METADATA_PATH = DATA_DIR / "VALIDATION_SET_GSE62944_metadata.csv"
 NONNA_PATH = DATA_DIR / "GSE62944_metadata_percent_nonNA_by_cancer_type.csv"
+TEST_DATA_PATH = DATA_DIR / "TEST_SET_GSE62944_subsample_log2TPM.csv"
+TEST_METADATA_PATH = DATA_DIR / "TEST_SET_GSE62944_metadata.csv"
 
 # We are focusin this first check-in on one cancer type to reduce biological heterogeneity.
 CANCER_TYPE = "COAD"  # Colon adenocarcinoma
@@ -442,6 +451,48 @@ def save_supervised_model_figures(
     fig.suptitle(f"{CANCER_TYPE}: Validation confusion matrices")
     plt.tight_layout()
     plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_validation_confusion_matrices.png", dpi=300)
+    plt.show()
+    plt.close()
+
+def save_final_test_figures(
+    final_model_name: str,
+    y_test: pd.Series,
+    test_scores: np.ndarray,
+    test_confusion_matrix: np.ndarray,
+) -> None:
+    # ROC
+    fig, ax = plt.subplots(figsize=(7, 5))
+    if "improved" in final_model_name.lower():
+        label_name = "Improved"
+    elif "baseline" in final_model_name.lower():
+        label_name = "Baseline"
+    else:
+        label_name = "Final model"
+
+    RocCurveDisplay.from_predictions(
+        y_test,
+        test_scores,
+        name=label_name,
+        ax=ax,
+    )
+
+    ax.plot([0, 1], [0, 1], linestyle="--", color="gray")
+    ax.set_title(f"{CANCER_TYPE}: Final test ROC")
+    ax.legend(loc="lower right")
+    plt.tight_layout()
+    plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_final_test_ROC.png", dpi=300)
+    plt.show()
+    plt.close()
+
+    # Confusion matrix
+    fig, ax = plt.subplots(figsize=(5, 4))
+    ConfusionMatrixDisplay(
+        confusion_matrix=test_confusion_matrix,
+        display_labels=["Early", "Late"],
+    ).plot(ax=ax, colorbar=False)
+    ax.set_title(f"{CANCER_TYPE}: Final test confusion matrix")
+    plt.tight_layout()
+    plt.savefig(RESULTS_DIR / f"{CANCER_TYPE}_final_test_confusion_matrix.png", dpi=300)
     plt.show()
     plt.close()
 
@@ -823,16 +874,67 @@ def run_logistic_regression_experiment(
         "coef_df": coef_df,
     }
 
+def apply_trained_model_to_new_split(
+    trained_model: Dict[str, object],
+    test_processed: Dict[str, object],
+    include_summary_features: bool,
+    split_name: str = "test",
+) -> Dict[str, object]:
+    # Build test features using the same feature recipe as the trained model
+    X_test = build_supervised_features(
+        test_processed["hallmark_gene_data"],      # type: ignore
+        test_processed["merged_scores"],           # type: ignore
+        include_summary_features=include_summary_features,
+    )
+
+    y_test = build_stage_binary_target(test_processed["merged_scores"])  # type: ignore
+
+    # Keep only samples with known labels
+    keep = y_test.notna()
+    X_test = X_test.loc[keep]
+    y_test = y_test.loc[keep].astype(int)
+
+    # Match feature columns to the training columns exactly
+    train_feature_names = trained_model["X_train"].columns.tolist()  # type: ignore
+    X_test = X_test.reindex(columns=train_feature_names)
+
+    # Fill missing values using training medians
+    train_medians = trained_model["X_train"].median(axis=0)  # type: ignore
+    X_test_filled = X_test.fillna(train_medians)
+
+    scaler = trained_model["scaler"]        # type: ignore
+    clf = trained_model["classifier"]       # type: ignore
+
+    X_test_scaled = scaler.transform(X_test_filled) # type: ignore
+
+    test_score = clf.predict_proba(X_test_scaled)[:, 1] # type: ignore
+    test_pred = (test_score >= 0.5).astype(int)
+
+    test_metrics = summarize_classification_metrics(
+        y_test, test_pred, test_score, split_name, trained_model["model_name"]  # type: ignore
+    )
+    test_cm = confusion_matrix(y_test, test_pred)
+
+    return {
+        "X_test": X_test,
+        "y_test": y_test,
+        "test_scores": test_score,
+        "test_preds": test_pred,
+        "test_metrics": test_metrics,
+        "test_confusion_matrix": test_cm,
+    }
+
 # We run the complete supervised modeling workflow, including data preparation, model training, evaluation, and figure generation.
 def run_supervised_modeling() -> Dict[str, object]:
     train_expr, train_meta = load_split_data(TRAINING_DATA_PATH, TRAINING_METADATA_PATH)
     valid_expr, valid_meta = load_split_data(VALIDATION_DATA_PATH, VALIDATION_METADATA_PATH)
+    test_expr, test_meta = load_split_data(TEST_DATA_PATH, TEST_METADATA_PATH)
 
     train_processed = prepare_modeling_split(train_expr, train_meta, CANCER_TYPE)
     valid_processed = prepare_modeling_split(valid_expr, valid_meta, CANCER_TYPE)
+    test_processed = prepare_modeling_split(test_expr, test_meta, CANCER_TYPE)
 
-    # Baseline model:
-    # raw 40 hallmark genes only, default class weighting
+    # Baseline model
     baseline = run_logistic_regression_experiment(
         train_processed=train_processed,
         valid_processed=valid_processed,
@@ -842,8 +944,7 @@ def run_supervised_modeling() -> Dict[str, object]:
         model_name="baseline_logreg_40genes",
     )
 
-    # Improved model:
-    # raw 40 genes + hallmark summary scores + age, with balanced classes and stronger regularization
+    # Improved model
     improved = run_logistic_regression_experiment(
         train_processed=train_processed,
         valid_processed=valid_processed,
@@ -858,8 +959,39 @@ def run_supervised_modeling() -> Dict[str, object]:
         ignore_index=True,
     )
 
+    # Select final model using validation AUROC
+    baseline_valid_auroc = float(baseline["valid_metrics"]["auroc"].iloc[0]) # type: ignore
+    improved_valid_auroc = float(improved["valid_metrics"]["auroc"].iloc[0]) # type: ignore
+
+    if improved_valid_auroc >= baseline_valid_auroc:
+        final_model = improved
+        final_model_include_summary_features = True
+        selected_model_name = "improved"
+    else:
+        final_model = baseline
+        final_model_include_summary_features = False
+        selected_model_name = "baseline"
+
+    # Apply selected model once to held-out test set
+    final_test_results = apply_trained_model_to_new_split(
+        trained_model=final_model,
+        test_processed=test_processed,
+        include_summary_features=final_model_include_summary_features,
+        split_name="test",
+    )
+
+    final_metrics_df = pd.concat(
+        [comparison_df, final_test_results["test_metrics"]], # type: ignore
+        ignore_index=True,
+    )
+
+    # Save tables
     comparison_df.to_csv(
         RESULTS_DIR / f"{CANCER_TYPE}_supervised_model_metrics.csv",
+        index=False,
+    )
+    final_metrics_df.to_csv(
+        RESULTS_DIR / f"{CANCER_TYPE}_all_model_metrics_with_test.csv",
         index=False,
     )
     baseline["coef_df"].to_csv( # type: ignore
@@ -870,15 +1002,31 @@ def run_supervised_modeling() -> Dict[str, object]:
         RESULTS_DIR / f"{CANCER_TYPE}_improved_logreg_coefficients.csv",
         index=False,
     )
+    final_test_results["test_metrics"].to_csv( # type: ignore
+        RESULTS_DIR / f"{CANCER_TYPE}_final_test_metrics.csv",
+        index=False,
+    )
 
+    # Save figures
     save_supervised_model_figures(baseline, improved)
+    save_final_test_figures(
+        final_model_name=str(final_model["model_name"]),
+        y_test=final_test_results["y_test"], # type: ignore
+        test_scores=final_test_results["test_scores"], # type: ignore
+        test_confusion_matrix=final_test_results["test_confusion_matrix"], # type: ignore
+    )
 
     return {
         "train_processed": train_processed,
         "valid_processed": valid_processed,
+        "test_processed": test_processed,
         "baseline": baseline,
         "improved": improved,
         "comparison_df": comparison_df,
+        "selected_model_name": selected_model_name,
+        "final_model": final_model,
+        "final_test_results": final_test_results,
+        "final_metrics_df": final_metrics_df,
     }
 
     # %%
@@ -1052,5 +1200,18 @@ if __name__ == "__main__":
     eda_results = run_eda()
 
     supervised_results = run_supervised_modeling()
-    print("\nSupervised modeling comparison:")
+
+    print("\nSupervised modeling comparison (training + validation):")
     print(supervised_results["comparison_df"])
+
+    print("\nSelected final model based on validation AUROC:")
+    print(supervised_results["selected_model_name"])
+
+    print("\nFinal held-out test-set metrics:")
+    print(supervised_results["final_test_results"]["test_metrics"]) # type: ignore
+
+    print("\nFinal held-out test confusion matrix:")
+    print(supervised_results["final_test_results"]["test_confusion_matrix"]) # type: ignore
+    
+    print("\nAll model metrics including test:")
+    print(supervised_results["final_metrics_df"])

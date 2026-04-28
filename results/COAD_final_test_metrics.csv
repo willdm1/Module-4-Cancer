@@ -1,0 +1,2 @@
+model,split,n_samples,accuracy,balanced_accuracy,precision,recall,f1,auroc
+improved_logreg_40genes_plus_scores_age_balanced,test,71,0.5492957746478874,0.5470494417862839,0.5151515151515151,0.5151515151515151,0.5151515151515151,0.5885167464114833
