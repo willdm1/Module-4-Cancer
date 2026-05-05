@@ -7540,72 +7540,67 @@ a.anchor-link {
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="Disease-Background:">Disease Background:<a class="anchor-link" href="#Disease-Background:">¶</a></h2><h3 id="Cancer-hallmark-focus">Cancer hallmark focus<a class="anchor-link" href="#Cancer-hallmark-focus">¶</a></h3><p>For this project, we decided to focus in on two hallmarks that are mechanistically connected and also easy to operationalize with our RNA-expression data:</p>
-<ol>
-<li><p><strong>Sustained growth/proliferative signaling</strong><br/>
-In our quick reference handout, we saw that this hallmark is described as cancer cells no longer waiting for normal external growth signals before dividing. This hallmark increases the cancer-cell division rate and relates idea to overactive growth-factor receptors and downstream signaling genes such as <strong>EGFR, RAS/KRAS, BRAF, and MYC</strong> [1].
+<h2 id="Disease-Background:">Disease Background:<a class="anchor-link" href="#Disease-Background:">¶</a></h2><p>For this project, we decided to focus in on two hallmarks that are mechanistically connected and also easy to operationalize with our RNA-expression data:</p>
+<h2 id="Sustained-growth/proliferative-signaling">Sustained growth/proliferative signaling<a class="anchor-link" href="#Sustained-growth/proliferative-signaling">¶</a></h2><p>In our quick reference handout, we saw that this hallmark is described as cancer cells no longer waiting for normal external growth signals before dividing. This hallmark increases the cancer-cell division rate and relates idea to overactive growth-factor receptors and downstream signaling genes such as EGFR, RAS/KRAS, BRAF, and MYC [1].
 In healthy tissue, proliferation is tightly regulated by extracellular ligands (e.g., growth factors) binding to receptors, which activate intracellular signaling cascades only when appropriate. In cancer, this control is bypassed through multiple mechanisms that lead to constitutive activation of growth pathways, including:</p>
-<ul>
+<ol>
 <li>Overexpression or mutation of receptor tyrosine kinases (e.g., EGFR, ERBB2), allowing signaling even in the absence of ligand</li>
 <li>Activating mutations in downstream signaling proteins (e.g., KRAS, NRAS, BRAF), which lock pathways such as the MAPK/ERK cascade in an “on” state</li>
 <li>Activation of survival and growth pathways such as PI3K/AKT signaling, promoting both proliferation and metabolic support</li>
 <li>Upregulation of transcription factors (e.g., MYC, FOS, JUN) that directly increase expression of genes required for cell-cycle progression</li>
-</ul>
-</li>
-<li><p><strong>Resist apoptosis</strong><br/>
-This hallmark describes the ability of cancer cells to evade/resist programmed cell death, a tightly regulated process that normally removes damaged or abnormal cells. In healthy tissue, apoptosis is particularly triggered by DNA damage, oncogenic stress, or loss of survival signals, and is executed through coordinated activation of caspases via intrinsic (mitochondrial) and extrinsic (death-receptor) pathways. For this project, our apoptosis-resistance genes includes <strong>TP53, BCL2, BCL2L1, MCL1, CASP8, CASP3, BAX, BAK1, APAF1, BID, CASP9, FAS, FASLG, BAD, BBC3, BCL2L11, CFLAR, DIABLO, TNF, and TNFRSF10B.</strong> In cancer, this system is disrupted through multiple mechanisms which include:</p>
-<ul>
-<li>Upregulation of anti-apoptotic proteins <strong>(e.g., BCL2, BCL2L1, MCL1)</strong>, which stabilize mitochondrial membranes and prevent cytochrome c release</li>
-<li>Downregulation or mutation of pro-apoptotic factors <strong>(e.g., BAX, BAK1, BID)</strong></li>
-<li>Loss of tumor suppressor function, especially <strong>TP53</strong>, which we assume would normally promote apoptosis in response to DNA damage</li>
-<li>Impaired caspase activation, limiting execution of the apoptotic program</li>
-</ul>
-<p>In a functional sense, resisting apoptosis allows cancer cells to survive despite accumulating mutations as well as sustain growth under stress (and during therapy).</p>
-</li>
 </ol>
-<h3 id="Why-we-chose-colon-adenocarcinoma-(COAD)">Why we chose colon adenocarcinoma (COAD)<a class="anchor-link" href="#Why-we-chose-colon-adenocarcinoma-(COAD)">¶</a></h3><p>We narrowed our analysis to <strong>one cancer type</strong> instead of many because we were contemplated on deciding whether to focus on one cancer type or to compare multiple cancers, and a single-type analysis is less biologically heterogeneous for our machine-learning workflow discussed in depth during class. We chose <strong>colon adenocarcinoma (COAD)</strong> because:</p>
-<ul>
+<p>Additionally, these signaling pathways are highly interconnected, meaning that activation at one point (such as a KRAS mutation) can propagate through multiple downstream pathways simultaneously. This redundancy contributes to therapeutic resistance and highlights why targeting a single gene or pathway often does not fully suppress tumor growth. In colorectal cancer specifically, aberrant activation of the Wnt/β-catenin pathway also plays a major role in driving uncontrolled proliferation, further demonstrating that multiple signaling systems contribute to this hallmark.</p>
+<h2 id="Resist-apoptosis">Resist apoptosis<a class="anchor-link" href="#Resist-apoptosis">¶</a></h2><p>This hallmark describes the ability of cancer cells to evade/resist programmed cell death, a tightly regulated process that normally removes damaged or abnormal cells. In healthy tissue, apoptosis is particularly triggered by DNA damage, oncogenic stress, or loss of survival signals, and is executed through coordinated activation of caspases via intrinsic (mitochondrial) and extrinsic (death-receptor) pathways. For this project, our apoptosis-resistance genes includes TP53, BCL2, BCL2L1, MCL1, CASP8, CASP3, BAX, BAK1, APAF1, BID, CASP9, FAS, FASLG, BAD, BBC3, BCL2L11, CFLAR, DIABLO, TNF, and TNFRSF10B. In cancer, this system is disrupted through multiple mechanisms which include:</p>
+<ol>
+<li>Upregulation of anti-apoptotic proteins (e.g., BCL2, BCL2L1, MCL1), which stabilize mitochondrial membranes and prevent cytochrome c release</li>
+<li>Downregulation or mutation of pro-apoptotic factors (e.g., BAX, BAK1, BID)</li>
+<li>Loss of tumor suppressor function, especially TP53, which we assume would normally promote apoptosis in response to DNA damage</li>
+<li>Impaired caspase activation, limiting execution of the apoptotic program</li>
+</ol>
+<p>In a functional sense, resisting apoptosis allows cancer cells to survive despite accumulating mutations as well as sustain growth under stress (and during therapy).</p>
+<p>In addition, resistance to apoptosis is a major contributor to chemotherapy and radiation resistance, since many cancer treatments rely on inducing DNA damage that should normally trigger cell death. When apoptotic pathways are disrupted, cancer cells can persist despite treatment, leading to disease progression and recurrence. Crosstalk between survival signaling pathways (such as PI3K/AKT) and apoptotic regulators further strengthens this resistance.</p>
+<h2 id="Why-we-chose-colon-adenocarcinoma-(COAD)">Why we chose colon adenocarcinoma (COAD)<a class="anchor-link" href="#Why-we-chose-colon-adenocarcinoma-(COAD)">¶</a></h2><p>We narrowed our analysis to one cancer type instead of many because we were contemplated on deciding whether to focus on one cancer type or to compare multiple cancers, and a single-type analysis is less biologically heterogeneous for our machine-learning workflow discussed in depth during class. We chose colon adenocarcinoma (COAD) because:</p>
+<ol>
 <li>Colorectal cancer was emphasized in our 1st lecture and hallmark simulation discussion</li>
 <li>Colon cancer has well-established links to deregulated growth signaling pathways</li>
 <li>Stage information is clinically meaningful for this disease in our initial examination</li>
 <li>One cancer type is a cleaner starting point than attempting many tumor biologies on an initial workflow.</li>
-<li>Colorectal cancer is one of the most common cancers worldwide, ranking third in incidence globally and contributing substantially to cancer-related mortality. [5]
-This provides us with a strong ethical and scientific motivation to further investigate COAD due to the large number of individuals it affects.</li>
-</ul>
-<h3 id="Overview-of-hallmark-biology">Overview of hallmark biology<a class="anchor-link" href="#Overview-of-hallmark-biology">¶</a></h3><p>In normal tissues, cells only divide when instructed by extracellular signals, undergo apoptosis when damaged or no longer needed, and remain integrated within the structural and functional organization of the tissue. These processes are largely controlled through coordinated signaling networks that maintain tissue homeostasis and also balance cell proliferation with differentiation and death. Cancer can be easily understood as the breakdown of these regulatory systems, where cells progressively acquire the ability to override multiple biological constraints at the same time. Rather than a single mutation causing disease, tumor development illustrates how the accumulation of changes disrupting normal control mechanisms can allow cells to behave in an erratic manner.</p>
+<li>Colorectal cancer is one of the most common cancers worldwide, ranking third in incidence globally and contributing substantially to cancer-related mortality. [5]</li>
+</ol>
+<p>This provides us with a strong ethical and scientific motivation to further investigate COAD due to the large number of individuals it affects.</p>
+<p>Additionally, COAD is one of the most well-characterized cancers at the genomic level, with large publicly available datasets (such as TCGA) that include both gene expression and clinical annotations. This makes it particularly suitable for integrating biological interpretation with machine-learning approaches, as both molecular and clinical variables can be analyzed together.</p>
+<h2 id="Overview-of-hallmark-biology">Overview of hallmark biology<a class="anchor-link" href="#Overview-of-hallmark-biology">¶</a></h2><p>In normal tissues, cells only divide when instructed by extracellular signals, undergo apoptosis when damaged or no longer needed, and remain integrated within the structural and functional organization of the tissue. These processes are largely controlled through coordinated signaling networks that maintain tissue homeostasis and also balance cell proliferation with differentiation and death. Cancer can be easily understood as the breakdown of these regulatory systems, where cells progressively acquire the ability to override multiple biological constraints at the same time. Rather than a single mutation causing disease, tumor development illustrates how the accumulation of changes disrupting normal control mechanisms can allow cells to behave in an erratic manner.</p>
 <p>For this project, we focus on two complementary hallmarks: one that acts as the “gas pedal” by driving sustained cell division, and one that weakens the “brake pedal” by impairing programmed cell death, the same analogy used in class to distinguish between oncogenes and tumor suppressors. Together, these hallmarks help us define a two-axis framework in which tumors can be positioned based on how strongly they promote growth versus how effectively they evade death. This paired analysis provides a biologically interpretable way to assess tumor behavior using our provided RNA-expression data.</p>
-<h3 id="Genes-associated-with-the-hallmark-to-be-studied">Genes associated with the hallmark to be studied<a class="anchor-link" href="#Genes-associated-with-the-hallmark-to-be-studied">¶</a></h3><p>We expanded our hallmark panel to 40 genes total so that the model has a richer feature space while remaining biologically interpretable.</p>
-<p><strong>Sustained proliferative signaling genes</strong>
-<code>EGFR, ERBB2, KRAS, NRAS, BRAF, PIK3CA, AKT1, MYC, FOS, JUN, MET, IGF1R, FGFR1, FGFR2, EGF, HGF, SOS1, GRB2, MAPK1, MAPK3</code></p>
+<p>It is also important to note that these hallmarks do not operate independently. Significant cross-talk exists between proliferative signaling and apoptosis pathways, meaning that activation of growth pathways can simultaneously suppress apoptotic signaling. This interconnected behavior further complicates attempts to model tumor stage using a limited gene set, as multiple biological systems contribute simultaneously to disease progression.</p>
+<h2 id="Genes-associated-with-the-hallmark-to-be-studied">Genes associated with the hallmark to be studied<a class="anchor-link" href="#Genes-associated-with-the-hallmark-to-be-studied">¶</a></h2><p>We expanded our hallmark panel to 40 genes total so that the model has a richer feature space while remaining biologically interpretable.</p>
+<p>Sustained proliferative signaling genes
+<strong>EGFR, ERBB2, KRAS, NRAS, BRAF, PIK3CA, AKT1, MYC, FOS, JUN, MET, IGF1R, FGFR1, FGFR2, EGF, HGF, SOS1, GRB2, MAPK1, MAPK3</strong></p>
 <p>These genes span many levels of growth signaling pathways, including:</p>
-<ul>
-<li><p>Receptor-level activation (EGFR, ERBB2)</p>
-</li>
-<li><p>Intracellular signal transduction (KRAS, NRAS, BRAF, PIK3CA, AKT1)</p>
-</li>
-<li><p>Transcriptional regulation of the cell cycle (MYC, FOS, JUN)</p>
-</li>
-</ul>
-<p><strong>Resist apoptosis genes</strong>
-<code>TP53, BCL2, BCL2L1, MCL1, CASP8, CASP3, BAX, BAK1, APAF1, BID, CASP9, FAS, FASLG, BAD, BBC3, BCL2L11, CFLAR, DIABLO, TNF, TNFRSF10B</code></p>
+<ol>
+<li>Receptor-level activation (EGFR, ERBB2)</li>
+<li>Intracellular signal transduction (KRAS, NRAS, BRAF, PIK3CA, AKT1)</li>
+<li>Transcriptional regulation of the cell cycle (MYC, FOS, JUN)</li>
+</ol>
+<p>Additionally, including genes across multiple levels of the signaling cascade allows us to capture both upstream activation events and downstream transcriptional responses, which may improve our ability to detect coordinated pathway activity from RNA-expression data.</p>
+<p>Resist apoptosis genes
+<strong>TP53, BCL2, BCL2L1, MCL1, CASP8, CASP3, BAX, BAK1, APAF1, BID, CASP9, FAS, FASLG, BAD, BBC3, BCL2L11, CFLAR, DIABLO, TNF, TNFRSF10B</strong></p>
 <p>These genes represent key regulators of apoptotic pathways, including:</p>
-<ul>
-<li><p>Tumor suppressor signaling (TP53)</p>
-</li>
-<li><p>Mitochondrial apoptosis regulation (BCL2 family: BCL2, BCL2L1, MCL1, BAX, BAK1, BID)</p>
-</li>
-<li><p>Execution of apoptosis via caspases (CASP8, CASP3)</p>
-</li>
-<li><p>Apoptosome formation and signaling (APAF1)</p>
-</li>
-</ul>
-<p>A CSV version of our list is included in our repo as <code>hallmark_gene_sets.csv</code>. In the EDA step, we explicitly check which of these genes are present in the local training matrix before making any downstream claims.</p>
-<h3 id="Prevalence-&amp;-incidence">Prevalence &amp; incidence<a class="anchor-link" href="#Prevalence-&amp;-incidence">¶</a></h3><p>Colorectal cancer is a major public-health burden. The American Cancer Society estimates that in the United States in <strong>2026</strong> there will be about <strong>108,860 new colon cancer cases</strong> and <strong>49,990 new rectal cancer cases</strong>, and colorectal cancer is expected to cause about <strong>55,230 deaths</strong>. Excluding skin cancers, it is the <strong>third most common cancer</strong> diagnosed in both men and women in the United States [5].</p>
-<h3 id="Risk-factors-(genetic,-lifestyle)-&amp;-societal-determinants">Risk factors (genetic, lifestyle) &amp; societal determinants<a class="anchor-link" href="#Risk-factors-(genetic,-lifestyle)-&amp;-societal-determinants">¶</a></h3><p>Major risk factors for colorectal cancer include <strong>older age</strong>, <strong>family history</strong>, <strong>personal history of colorectal neoplasia</strong>, inherited syndromes such as familial adenomatous polyposis <strong>FAP</strong> and <strong>Lynch syndrome</strong>. Lifestyle-related factors also play a role, including <strong>dietary patterns</strong>, <strong>alcohol consumption</strong>, <strong>cigarette smoking</strong>, and <strong>obesity</strong> [4], [5]. All of which can largely influence inflammation and cellular stress within the colon. <strong>Inflammatory bowel disease (IBD)</strong> further increases risk by repeated cycles of tissue damage and regeneration, which can facilitate mutation accumulation.</p>
-<p>In addition to biological risk factors, we note that societal determinants can significantly contribute to risk factors, including access to screening, healthcare availability, socioeconomic status, and geographic location (strongly influence both incidence and outcomes). Early detection can significantly reduce mortality by identifying precancerous lesions or early-stage tumors, whereas limited access to care is associated with later-stage diagnoses and poorer prognosis [5].</p>
-<h3 id="Standard-of-care-treatments-(&amp;-reimbursement)">Standard of care treatments (&amp; reimbursement)<a class="anchor-link" href="#Standard-of-care-treatments-(&amp;-reimbursement)">¶</a></h3><p>Treatment depends strongly on stage and biomarker status. For early-stage disease, surgical resection is often the primary treatment and can be curative. Standard approaches include <strong>surgery</strong>, <strong>chemotherapy</strong>, <strong>radiation therapy</strong> (more common in rectal disease), <strong>targeted therapy</strong>, and <strong>immunotherapy</strong>.</p>
+<ol>
+<li>Tumor suppressor signaling (TP53)</li>
+<li>Mitochondrial apoptosis regulation (BCL2 family: BCL2, BCL2L1, MCL1, BAX, BAK1, BID)</li>
+<li>Execution of apoptosis via caspases (CASP8, CASP3)</li>
+<li>Apoptosome formation and signaling (APAF1)</li>
+</ol>
+<p>By including both pro-apoptotic and anti-apoptotic regulators, this gene set allows us to capture the balance of survival versus death signaling within each tumor sample, rather than focusing on only one side of the pathway.</p>
+<h2 id="Prevalence-&amp;-incidence">Prevalence &amp; incidence<a class="anchor-link" href="#Prevalence-&amp;-incidence">¶</a></h2><p>Colorectal cancer is a major public-health burden. The American Cancer Society estimates that in the United States in 2026 there will be about 108,860 new colon cancer cases and 49,990 new rectal cancer cases, and colorectal cancer is expected to cause about 55,230 deaths. Excluding skin cancers, it is the third most common cancer diagnosed in both men and women in the United States [5].</p>
+<p>Globally, colorectal cancer incidence continues to rise in many developing regions, likely due to increasing adoption of Western dietary and lifestyle patterns. This trend further emphasizes the importance of understanding both biological and environmental drivers of disease.</p>
+<h2 id="Risk-factors-(genetic,-lifestyle)-&amp;-societal-determinants">Risk factors (genetic, lifestyle) &amp; societal determinants<a class="anchor-link" href="#Risk-factors-(genetic,-lifestyle)-&amp;-societal-determinants">¶</a></h2><p>Major risk factors for colorectal cancer include older age, family history, personal history of colorectal neoplasia, inherited syndromes such as familial adenomatous polyposis FAP and Lynch syndrome. Lifestyle-related factors also play a role, including dietary patterns, alcohol consumption, cigarette smoking, and obesity [4], [5]. All of which can largely influence inflammation and cellular stress within the colon. Inflammatory bowel disease (IBD) further increases risk by repeated cycles of tissue damage and regeneration, which can facilitate mutation accumulation. In addition to biological risk factors, we note that societal determinants can significantly contribute to risk factors, including access to screening, healthcare availability, socioeconomic status, and geographic location (strongly influence both incidence and outcomes). Early detection can significantly reduce mortality by identifying precancerous lesions or early-stage tumors, whereas limited access to care is associated with later-stage diagnoses and poorer prognosis [5].</p>
+<p>These disparities highlight how non-biological factors can influence disease stage at diagnosis, which further complicates attempts to predict stage using only molecular data.</p>
+<h2 id="Standard-of-care-treatments-(&amp;-reimbursement)">Standard of care treatments (&amp; reimbursement)<a class="anchor-link" href="#Standard-of-care-treatments-(&amp;-reimbursement)">¶</a></h2><p>Treatment depends strongly on stage and biomarker status. For early-stage disease, surgical resection is often the primary treatment and can be curative. Standard approaches include surgery, chemotherapy, radiation therapy (more common in rectal disease), targeted therapy, and immunotherapy.</p>
 <p>While we do not make detailed reimbursement claims in this analysis, it is important to note that both tumor stage and biomarker status directly influence treatment selection as well as eligibility for targeted therapies and overall cost of care. This further supports our emphasis on the relevance of linking molecular patterns (such as hallmark-associated gene expression) to clinically meaningful variables like tumor stage.</p>
-<h3 id="Biological-mechanisms-(anatomy,-organ-physiology,-cell-&amp;-molecular-physiology)">Biological mechanisms (anatomy, organ physiology, cell &amp; molecular physiology)<a class="anchor-link" href="#Biological-mechanisms-(anatomy,-organ-physiology,-cell-&amp;-molecular-physiology)">¶</a></h3><p>The colon absorbs water and electrolytes from intestinal contents, while the rectum stores stool before elimination. Colon adenocarcinoma arises from epithelial cells in this system. At the molecular level, colorectal tumor development is driven by changes in genes controlling cell division, survival, differentiation, and tissue organization. That makes COAD a good test case for our RNA-based hallmark analysis because aberrant growth signaling and resistance to cell death should both leave measurable transcriptomic signatures for us to interpret [4].</p>
+<p>For example, mutations in genes such as KRAS and BRAF can directly influence eligibility for certain targeted therapies, demonstrating how molecular features are already integrated into clinical decision-making alongside stage.</p>
+<h2 id="Biological-mechanisms-(anatomy,-organ-physiology,-cell-&amp;-molecular-physiology)">Biological mechanisms (anatomy, organ physiology, cell &amp; molecular physiology)<a class="anchor-link" href="#Biological-mechanisms-(anatomy,-organ-physiology,-cell-&amp;-molecular-physiology)">¶</a></h2><p>The colon absorbs water and electrolytes from intestinal contents, while the rectum stores stool before elimination. Colon adenocarcinoma arises from epithelial cells in this system. At the molecular level, colorectal tumor development is driven by changes in genes controlling cell division, survival, differentiation, and tissue organization. That makes COAD a good test case for our RNA-based hallmark analysis because aberrant growth signaling and resistance to cell death should both leave measurable transcriptomic signatures for us to interpret [4].
+In addition, colorectal cancer often follows a well-characterized progression from normal epithelium to adenoma to carcinoma, involving sequential accumulation of genetic alterations. This stepwise progression further supports the idea that tumor stage reflects cumulative biological changes rather than a single pathway, reinforcing the need to interpret hallmark signals within a broader biological context.</p>
 <p><img alt="alt text" src="../results/Hallmarks-of-Cancer.jpg"/></p>
 </div>
 </div>
